@@ -49,13 +49,6 @@ def _validate_timeout(
     help="Color the messages of the tool (when the terminal supports it).",
 )
 @click.option(
-    "--pager/--no-pager",
-    "-G",
-    default=False,
-    show_default=True,
-    help="Print the data output through a pager (when on a terminal).",
-)
-@click.option(
     "--timeout",
     type=float,
     default=60.0,
@@ -76,6 +69,13 @@ def _validate_timeout(
     is_flag=True,
     default=False,
     help="Overwrite OUTPUT if it already exists.",
+)
+@click.option(
+    "-P",
+    "--pager",
+    is_flag=True,
+    default=False,
+    help="Print the data output through a pager (when on a terminal).",
 )
 @click.option(
     "-v",

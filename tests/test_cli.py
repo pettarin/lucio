@@ -78,8 +78,7 @@ class TestOptions:
         assert "INPUT [OUTPUT]" in unwrapped
         assert "-E, --omit-edit-comment" in unwrapped
         assert "-O, --overwrite-files" in unwrapped
-        assert "-G, --pager / --no-pager" in unwrapped
-        assert "on a terminal). [default: no-pager]" in unwrapped
+        assert "-P, --pager" in unwrapped
         assert "-1 for no timeout. [default: 60.0]" in unwrapped
         assert "--verbose" in unwrapped
 
@@ -105,6 +104,13 @@ class TestUsageErrors:
         (workspace / INPUT).write_text("text\n", encoding="utf-8")
         result = run(INPUT, str(workspace / INPUT))
         assert result.exit_code == 2
+
+    @pytest.mark.parametrize("option", ["--no-pager", "-G"])
+    def test_the_removed_pager_spellings(self, workspace, option):
+        (workspace / INPUT).write_text("text\n", encoding="utf-8")
+        result = run(option, INPUT, OUTPUT)
+        assert result.exit_code == 2
+        assert "No such option" in result.stderr
 
     @pytest.mark.parametrize("timeout", ["0", "-2", "-0.5"])
     def test_non_positive_timeout(self, workspace, timeout):
@@ -385,7 +391,7 @@ class TestPager:
         paged.assert_called_once_with("```bash\necho hi\nhi\n```\n")
         assert result.stdout == ""
 
-    @pytest.mark.parametrize("flag", ["-G", "--pager"])
+    @pytest.mark.parametrize("flag", ["-P", "--pager"])
     def test_both_spellings_page(self, workspace, mocker, flag):
         mocker.patch("lucio.cli._use_pager", return_value=True)
         paged = mocker.patch("lucio.cli.click.echo_via_pager")
@@ -618,7 +624,7 @@ class TestVerbose:
         assert unstamped(result.stderr).startswith(settings(workspace, output="elsewhere.md"))
 
     def test_the_settings_report_the_pager_flag(self, workspace):
-        result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v", "-G")
+        result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v", "-P")
         assert result.exit_code == 0
         assert "[DEBU] Pager: True\n" in unstamped(result.stderr)
 

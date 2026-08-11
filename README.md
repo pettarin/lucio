@@ -127,19 +127,19 @@ Usage: lucio [OPTIONS] INPUT [OUTPUT]
   succeeded, so a failing block leaves OUTPUT untouched.
 
 Options:
-  --version                 Show the version and exit.
-  --color / --no-color      Color the messages of the tool (when the terminal
-                            supports it).  [default: color]
-  -G, --pager / --no-pager  Print the data output through a pager (when on a
-                            terminal).  [default: no-pager]
-  --timeout FLOAT           Per-block execution timeout, in seconds; -1 for no
-                            timeout.  [default: 60.0]
-  -E, --omit-edit-comment   Do not open the rendered document with the do-not-
-                            edit comment.
-  -O, --overwrite-files     Overwrite OUTPUT if it already exists.
-  -v, --verbose             Log each executed block and its exit code to
-                            stderr.
-  -h, --help                Show this message and exit.
+  --version                Show the version and exit.
+  --color / --no-color     Color the messages of the tool (when the terminal
+                           supports it).  [default: color]
+  --timeout FLOAT          Per-block execution timeout, in seconds; -1 for no
+                           timeout.  [default: 60.0]
+  -E, --omit-edit-comment  Do not open the rendered document with the do-not-
+                           edit comment.
+  -O, --overwrite-files    Overwrite OUTPUT if it already exists.
+  -P, --pager              Print the data output through a pager (when on a
+                           terminal).
+  -v, --verbose            Log each executed block and its exit code to
+                           stderr.
+  -h, --help               Show this message and exit.
 ```
 
 INPUT is required; OUTPUT is optional, and the two must resolve to different files.
@@ -170,11 +170,11 @@ in a pipeline even for a template-named INPUT:
 lucio README.template.md - | less
 ```
 
-`-G` / `--pager` does the same without the pipe, sending the document to your
+`-P` / `--pager` does the same without the pipe, sending the document to your
 `PAGER` when stdout is a terminal:
 
 ```bash
-lucio README.template.md - -G
+lucio README.template.md - -P
 ```
 
 Off a terminal the option does nothing at all, so a redirected document is

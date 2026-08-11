@@ -138,11 +138,11 @@ in a pipeline even for a template-named INPUT:
 lucio README.template.md - | less
 ```
 
-`-G` / `--pager` does the same without the pipe, sending the document to your
+`-P` / `--pager` does the same without the pipe, sending the document to your
 `PAGER` when stdout is a terminal:
 
 ```bash
-lucio README.template.md - -G
+lucio README.template.md - -P
 ```
 
 Off a terminal the option does nothing at all, so a redirected document is

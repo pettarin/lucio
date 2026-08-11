@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Print the rendered document on stdout when OUTPUT is omitted, or when it is `-`
 - `-O` / `--overwrite-files` option, required to overwrite an existing OUTPUT
 - `--color` / `--no-color` option
-- `-G` / `--pager` option, printing the document through a pager when on a terminal
+- `-P` / `--pager` option, printing the document through a pager when on a terminal
 - Open the rendered document with a comment naming the template it came from,
   omitted by the `-E` / `--omit-edit-comment` option
 - Log the settings of the run at `DEBUG` level, before the first block is executed:
