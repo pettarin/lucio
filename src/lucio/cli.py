@@ -150,6 +150,12 @@ def main(
             )
 
     source = str(input_file)
+    rendering = (
+        f'Rendering "{source}" on the standard output'
+        if destination is None
+        else f'Rendering "{source}" into "{destination}"'
+    )
+    info(f"{rendering}...")
     text = _read_template(input_file, source)
 
     def runner(block: BlockSegment) -> ExecutionResult:
@@ -194,10 +200,7 @@ def main(
     except OSError as exc:
         _fail(f"{destination or 'stdout'}: {exc}", EXIT_WRITE_ERROR)
 
-    if destination is None:
-        info(f'Rendered "{source}" on the standard output')
-    else:
-        info(f'Rendered "{source}" into "{destination}"')
+    info(f"{rendering}... done")
 
 
 def _edit_comment(input_file: Path, destination: Path | None) -> str:

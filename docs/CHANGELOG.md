@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Report a run as a pair of `INFO` lines, `Rendering "IN" into "OUT"...` before the work
+  and the same with `done` after it, in place of the single line once it was over
 - Rename `--timeout` to `-b` / `--block-timeout`, default it to 60 seconds, and accept
   `-1` for no timeout at all
 - Name the attribute that permitted a non-zero exit code in the verbose log,

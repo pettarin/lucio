@@ -299,7 +299,10 @@ class TestStandardOutput:
         result = run("-E", INPUT, STDOUT)
         assert result.exit_code == 0
         assert result.stdout == "# Title\n\n```bash\necho hello\nhello\n```\n"
-        assert unstamped(result.stderr) == f'[INFO] Rendered "{INPUT}" on the standard output\n'
+        assert unstamped(result.stderr) == (
+            f'[INFO] Rendering "{INPUT}" on the standard output...\n'
+            f'[INFO] Rendering "{INPUT}" on the standard output... done\n'
+        )
 
     def test_no_file_is_written(self, workspace):
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
@@ -313,9 +316,10 @@ class TestStandardOutput:
         assert result.stdout == "```bash\necho hi\nhi\n```\n"
         assert unstamped(result.stderr) == (
             settings(workspace, output=None)
+            + f'[INFO] Rendering "{INPUT}" on the standard output...\n'
             + f"[DEBU] {INPUT}:1: executing bash block\n"
             + f"[DEBU] {INPUT}:1: exit code 0\n"
-            + f'[INFO] Rendered "{INPUT}" on the standard output\n'
+            + f'[INFO] Rendering "{INPUT}" on the standard output... done\n'
         )
 
     def test_nothing_is_printed_when_a_block_fails(self, workspace):
@@ -612,10 +616,11 @@ class TestVerbose:
         assert result.exit_code == 0
         assert unstamped(result.stderr) == (
             settings(workspace)
+            + f'[INFO] Rendering "{INPUT}" into "{OUTPUT}"...\n'
             + f"[DEBU] {INPUT}:3: executing bash block\n"
             + f"[DEBU] {INPUT}:3: exit code 0\n"
             + '[DEBU] doc.template.md:7: including "OTHER.md"\n'
-            + f'[INFO] Rendered "{INPUT}" into "{OUTPUT}"\n'
+            + f'[INFO] Rendering "{INPUT}" into "{OUTPUT}"... done\n'
         )
 
     @pytest.mark.parametrize(
@@ -687,7 +692,37 @@ class TestVerbose:
 
     def test_only_the_summary_shows_by_default(self, workspace):
         result, _ = render(workspace, "```bash lucio\necho hi\n```\n")
-        assert unstamped(result.stderr) == f'[INFO] Rendered "{INPUT}" into "{OUTPUT}"\n'
+        assert unstamped(result.stderr) == (
+            f'[INFO] Rendering "{INPUT}" into "{OUTPUT}"...\n'
+            f'[INFO] Rendering "{INPUT}" into "{OUTPUT}"... done\n'
+        )
+
+    def test_the_summary_is_a_pair(self, workspace):
+        result, _ = render(workspace, "```bash lucio\necho hi\n```\n")
+        assert result.exit_code == 0
+        opening = f'[INFO] Rendering "{INPUT}" into "{OUTPUT}"...'
+        assert unstamped(result.stderr) == f"{opening}\n{opening} done\n"
+
+    def test_a_failing_run_never_says_done(self, workspace):
+        result, output = render(workspace, "```bash lucio\nexit 3\n```\n")
+        assert result.exit_code == 4
+        # Not unstamped(): the mismatch message carries the captured stderr over lines
+        assert f'[INFO] Rendering "{INPUT}" into "{OUTPUT}"...\n' in result.stderr
+        assert "done" not in result.stderr
+        assert not output.exists()
+
+    def test_a_refused_run_says_neither(self, workspace):
+        (workspace / OUTPUT).write_text("previous content\n", encoding="utf-8")
+        result, _ = render(workspace, "```bash lucio\necho hi\n```\n")
+        assert result.exit_code == 1
+        assert "Rendering" not in result.stderr
+
+    def test_the_pair_names_the_standard_output(self, workspace):
+        (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
+        result = run("-E", INPUT, STDOUT)
+        assert result.exit_code == 0
+        opening = f'[INFO] Rendering "{INPUT}" on the standard output...'
+        assert unstamped(result.stderr) == f"{opening}\n{opening} done\n"
 
     def test_the_debug_lines_need_verbose(self, workspace):
         result, _ = render(workspace, "```bash lucio\necho hi\n```\n")
@@ -699,6 +734,7 @@ class TestFailures:
         result, output = render(workspace, "text\n\n```bash lucio exit=999\necho hi\n```\n")
         assert result.exit_code == 3
         assert unstamped(result.stderr) == (
+            f'[INFO] Rendering "{INPUT}" into "{OUTPUT}"...\n'
             f"[ERRO] {INPUT}:3: attribute 'exit' must be 'any' or an integer 0-255, "
             "found '999'\n"
         )

@@ -181,14 +181,16 @@ The messages of the tool go through the standard `logging` machinery, under the
 [2026-08-11T10:14:52.311Z] [DEBU] Pager: False
 [2026-08-11T10:14:52.311Z] [DEBU] Block timeout: 60.0 seconds
 [2026-08-11T10:14:52.311Z] [DEBU] Total timeout: 300.0 seconds
+[2026-08-11T10:14:52.312Z] [INFO] Rendering "README.template.md" into "README.md"...
 [2026-08-11T10:14:52.318Z] [DEBU] README.template.md:12: executing bash block
 [2026-08-11T10:14:52.402Z] [DEBU] README.template.md:12: exit code 0
 [2026-08-11T10:14:52.404Z] [DEBU] README.template.md:24: including "PART.md"
-[2026-08-11T10:14:52.406Z] [INFO] Rendered "README.template.md" into "README.md"
+[2026-08-11T10:14:52.406Z] [INFO] Rendering "README.template.md" into "README.md"... done
 ```
 
-`INFO` and above are shown by default, which is one line per run saying what was
-written; failures are reported as `ERRO`. `-v` lowers the bar to `DEBUG`, which opens
+`INFO` and above are shown by default, which is the pair of lines above: one when the
+work starts, naming what is being written, and one when it succeeded. A run that fails
+shows the first without the second; failures themselves are reported as `ERRO`. `-v` lowers the bar to `DEBUG`, which opens
 the log with the settings of the run --- the resolved paths and every option that
 shapes what happens --- and then reports every block as it is performed: the command
 run and the code it exited with, or the file included. The levels are colored when
