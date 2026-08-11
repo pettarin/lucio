@@ -5,6 +5,7 @@
 """
 
 import os
+import re
 
 import pytest
 from click.testing import CliRunner
@@ -15,6 +16,15 @@ from lucio.cli import main
 INPUT = "doc.template.md"
 OUTPUT = "doc.md"
 STDOUT = "-"
+
+_STAMP = re.compile(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\] ", re.MULTILINE)
+
+
+def unstamped(text):
+    """Return console output without its timestamps, asserting every line carried one."""
+    lines = text.splitlines(keepends=True)
+    assert all(_STAMP.match(line) for line in lines), text
+    return _STAMP.sub("", text)
 
 
 @pytest.fixture
@@ -225,7 +235,7 @@ class TestStandardOutput:
         result = run(INPUT, STDOUT)
         assert result.exit_code == 0
         assert result.stdout == "# Title\n\n```bash\necho hello\nhello\n```\n"
-        assert result.stderr == ""
+        assert unstamped(result.stderr) == f'[INFO] Rendered "{INPUT}" on the standard output\n'
 
     def test_no_file_is_written(self, workspace):
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
@@ -237,8 +247,10 @@ class TestStandardOutput:
         result = run("-v", INPUT, STDOUT)
         assert result.exit_code == 0
         assert result.stdout == "```bash\necho hi\nhi\n```\n"
-        assert result.stderr == (
-            f"lucio: {INPUT}:1: executing bash lucio block\nlucio: {INPUT}:1: exit code 0\n"
+        assert unstamped(result.stderr) == (
+            f"[DEBU] {INPUT}:1: executing bash lucio block\n"
+            f"[DEBU] {INPUT}:1: exit code 0\n"
+            f'[INFO] Rendered "{INPUT}" on the standard output\n'
         )
 
     def test_nothing_is_printed_when_a_block_fails(self, workspace):
@@ -322,8 +334,8 @@ class TestOverwriteGuard:
         (workspace / OUTPUT).write_text("previous content\n", encoding="utf-8")
         result, output = render(workspace, "```bash lucio\necho hi\n```\n")
         assert result.exit_code == 1
-        assert result.stderr == (
-            f"lucio: error: {OUTPUT}: file exists (use --overwrite-files to overwrite)\n"
+        assert unstamped(result.stderr) == (
+            f"[ERRO] {OUTPUT}: file exists (use --overwrite-files to overwrite)\n"
         )
         assert output.read_text(encoding="utf-8") == "previous content\n"
 
@@ -344,8 +356,8 @@ class TestOverwriteGuard:
         (workspace / OUTPUT).write_text("previous content\n", encoding="utf-8")
         result = run(INPUT)
         assert result.exit_code == 1
-        assert result.stderr == (
-            f"lucio: error: {OUTPUT}: file exists (use --overwrite-files to overwrite)\n"
+        assert unstamped(result.stderr) == (
+            f"[ERRO] {OUTPUT}: file exists (use --overwrite-files to overwrite)\n"
         )
         assert (workspace / OUTPUT).read_text(encoding="utf-8") == "previous content\n"
 
@@ -391,29 +403,34 @@ class TestVerbose:
         )
         result, _ = render(workspace, template, "-v")
         assert result.exit_code == 0
-        assert result.stderr == (
-            f"lucio: {INPUT}:3: executing bash lucio block\n"
-            f"lucio: {INPUT}:3: exit code 0\n"
-            f"lucio: {INPUT}:7: executing bash include block\n"
-            f"lucio: {INPUT}:7: exit code 0\n"
+        assert unstamped(result.stderr) == (
+            f"[DEBU] {INPUT}:3: executing bash lucio block\n"
+            f"[DEBU] {INPUT}:3: exit code 0\n"
+            f"[DEBU] {INPUT}:7: executing bash include block\n"
+            f"[DEBU] {INPUT}:7: exit code 0\n"
+            f'[INFO] Rendered "{INPUT}" into "{OUTPUT}"\n'
         )
 
     def test_exit_code_is_reported(self, workspace):
         result, _ = render(workspace, "```bash lucio exit=any\nexit 3\n```\n", "--verbose")
         assert result.exit_code == 0
-        assert f"lucio: {INPUT}:1: exit code 3\n" in result.stderr
+        assert f"[DEBU] {INPUT}:1: exit code 3\n" in unstamped(result.stderr)
 
-    def test_quiet_by_default(self, workspace):
+    def test_only_the_summary_shows_by_default(self, workspace):
         result, _ = render(workspace, "```bash lucio\necho hi\n```\n")
-        assert result.stderr == ""
+        assert unstamped(result.stderr) == f'[INFO] Rendered "{INPUT}" into "{OUTPUT}"\n'
+
+    def test_the_debug_lines_need_verbose(self, workspace):
+        result, _ = render(workspace, "```bash lucio\necho hi\n```\n")
+        assert "[DEBU]" not in result.stderr
 
 
 class TestFailures:
     def test_syntax_error_exits_three_and_writes_nothing(self, workspace):
         result, output = render(workspace, "text\n\n```bash lucio exit=999\necho hi\n```\n")
         assert result.exit_code == 3
-        assert result.stderr == (
-            f"lucio: error: {INPUT}:3: attribute 'exit' must be 'any' or an integer 0-255, "
+        assert unstamped(result.stderr) == (
+            f"[ERRO] {INPUT}:3: attribute 'exit' must be 'any' or an integer 0-255, "
             "found '999'\n"
         )
         assert not output.exists()
@@ -467,10 +484,10 @@ class TestFailures:
         mocker.patch("pathlib.Path.open", side_effect=OSError("disk on fire"))
         result = run(INPUT, OUTPUT)
         assert result.exit_code == 3
-        assert f"lucio: error: {INPUT}: disk on fire" in result.stderr
+        assert f"[ERRO] {INPUT}: disk on fire" in unstamped(result.stderr)
 
     def test_unwritable_output_exits_one(self, workspace):
         (workspace / INPUT).write_text("text\n", encoding="utf-8")
         result = run(INPUT, "missing_directory/doc.md")
         assert result.exit_code == 1
-        assert "lucio: error: missing_directory/doc.md" in result.stderr
+        assert "[ERRO] missing_directory/doc.md" in unstamped(result.stderr)

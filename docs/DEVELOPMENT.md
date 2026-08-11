@@ -71,6 +71,7 @@ lucio/
 │   └── lucio/
 │       ├── __init__.py           # public API re-exports and version
 │       ├── cli.py                # Click-based CLI, and the exit codes of the tool
+│       ├── console.py            # logging handler printing the timestamped messages
 │       ├── errors.py             # LucioError and its subclasses
 │       ├── executor.py           # bash subprocess execution and expected-exit policy
 │       ├── model.py              # segments, block options, and execution results
@@ -78,6 +79,7 @@ lucio/
 │       └── renderer.py           # rendering of the parsed segments into Markdown
 ├── tests/                        # unit tests
 │   ├── test_cli.py
+│   ├── test_console.py
 │   ├── test_errors.py
 │   ├── test_executor.py
 │   ├── test_parser.py

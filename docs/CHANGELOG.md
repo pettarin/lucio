@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Derive OUTPUT from an INPUT named `NAME.template.md`, rendering it into `NAME.md`
 - Print the rendered document on stdout when OUTPUT is omitted, or when it is `-`
 - `-O` / `--overwrite-files` option, required to overwrite an existing OUTPUT
+- `--color` / `--no-color` option
+
+### Changed
+
+- Log the messages of the tool through the `lucio` logger, as
+  `[UTC timestamp] [LEVEL] message` on stderr, colored when the terminal supports it;
+  one `INFO` line per run reports what was rendered, and `--verbose` adds the `DEBUG` ones
 
 
 ## [0.0.2] - 2026-08-11

@@ -4,6 +4,8 @@
 :license: GNU General Public License v3.0 (see the LICENSE file for details)
 """
 
+import logging
+
 from lucio.errors import (
     ExecutionError,
     ExecutionTimeoutError,
@@ -12,6 +14,10 @@ from lucio.errors import (
     TemplateError,
     TemplateSyntaxError,
 )
+
+# The package logs under the "lucio" logger; without a handler of the user's (the
+# CLI installs its own), the records go nowhere, silently
+logging.getLogger("lucio").addHandler(logging.NullHandler())
 
 __version__ = "0.0.3"
 __author__ = "Alberto Pettarin"

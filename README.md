@@ -119,6 +119,8 @@ Usage: lucio [OPTIONS] INPUT [OUTPUT]
 
 Options:
   --version              Show the version and exit.
+  --color / --no-color   Color the messages of the tool (when the terminal
+                         supports it).  [default: color]
   --timeout FLOAT RANGE  Per-block execution timeout, in seconds.  [default:
                          120.0; x>0]
   -O, --overwrite-files  Overwrite OUTPUT if it already exists.
@@ -158,6 +160,25 @@ only thing ever written to stdout.
 An existing OUTPUT is never clobbered by accident, derived names included: `lucio`
 refuses to run unless `-O` / `--overwrite-files` is given. The check happens before
 the template is parsed, so a refusal costs nothing and executes no block.
+
+### Logging
+
+The messages of the tool go through the standard `logging` machinery, under the
+`lucio` logger, and come out on stderr stamped with the UTC time and their level:
+
+```
+[2026-08-11T10:14:52.318Z] [DEBU] README.template.md:12: executing bash lucio block
+[2026-08-11T10:14:52.402Z] [DEBU] README.template.md:12: exit code 0
+[2026-08-11T10:14:52.404Z] [INFO] Rendered "README.template.md" into "README.md"
+```
+
+`INFO` and above are shown by default, which is one line per run saying what was
+written; `-v` lowers the bar to `DEBUG` and adds the two lines per executed block
+seen above; failures are reported as `ERRO`. The levels are colored when stderr is
+a terminal, and `--no-color` turns that off everywhere.
+
+Using `lucio` as a library instead, nothing is printed until you install a handler
+of your own on the `lucio` logger.
 
 ### Exit codes
 

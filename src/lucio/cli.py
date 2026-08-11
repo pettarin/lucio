@@ -10,6 +10,7 @@ from typing import NoReturn
 import click
 
 from lucio import __version__
+from lucio.console import debug, error, info, setup_console
 from lucio.errors import ExecutionError, TemplateError
 from lucio.executor import execute_block
 from lucio.model import BlockSegment, ExecutionResult
@@ -26,6 +27,12 @@ TEMPLATE_SUFFIX = ".template.md"
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(version=__version__, prog_name="lucio")
+@click.option(
+    "--color/--no-color",
+    default=True,
+    show_default=True,
+    help="Color the messages of the tool (when the terminal supports it).",
+)
 @click.option(
     "--timeout",
     type=click.FloatRange(min=0, min_open=True),
@@ -59,6 +66,7 @@ TEMPLATE_SUFFIX = ".template.md"
 def main(
     input_file: Path,
     output_file: Path | None,
+    color: bool,
     overwrite_files: bool,
     timeout: float,
     verbose: bool,
@@ -72,6 +80,7 @@ def main(
     The template is rendered in memory and written out only once everything succeeded,
     so a failing block leaves OUTPUT untouched.
     """
+    setup_console(color=color, verbose=verbose)
     destination = _resolve_output(input_file, output_file)
     if destination is not None:
         if input_file.resolve() == destination.resolve():
@@ -86,11 +95,9 @@ def main(
     text = _read_template(input_file, source)
 
     def runner(block: BlockSegment) -> ExecutionResult:
-        if verbose:
-            _log(f"{source}:{block.line}: executing bash {block.kind.value} block")
+        debug(f"{source}:{block.line}: executing bash {block.kind.value} block")
         result = execute_block(block, source, timeout)
-        if verbose:
-            _log(f"{source}:{block.line}: exit code {result.exit_code}")
+        debug(f"{source}:{block.line}: exit code {result.exit_code}")
         return result
 
     try:
@@ -109,16 +116,16 @@ def main(
     except OSError as exc:
         _fail(f"{destination or 'stdout'}: {exc}", EXIT_WRITE_ERROR)
 
+    if destination is None:
+        info(f'Rendered "{source}" on the standard output')
+    else:
+        info(f'Rendered "{source}" into "{destination}"')
+
 
 def _fail(message: str, code: int) -> NoReturn:
     """Report ``message`` on stderr and terminate with the given exit code."""
-    _log(f"error: {message}")
+    error(message)
     raise SystemExit(code)
-
-
-def _log(message: str) -> None:
-    """Write one lucio diagnostic line to stderr."""
-    click.echo(f"lucio: {message}", err=True)
 
 
 def _read_template(input_file: Path, source: str) -> str:
