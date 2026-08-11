@@ -121,8 +121,8 @@ Options:
   --version              Show the version and exit.
   --color / --no-color   Color the messages of the tool (when the terminal
                          supports it).  [default: color]
-  --timeout FLOAT RANGE  Per-block execution timeout, in seconds.  [default:
-                         120.0; x>0]
+  --timeout FLOAT        Per-block execution timeout, in seconds; -1 for no
+                         timeout.  [default: 60.0]
   -O, --overwrite-files  Overwrite OUTPUT if it already exists.
   -v, --verbose          Log each executed block and its exit code to stderr.
   -h, --help             Show this message and exit.
@@ -160,6 +160,10 @@ only thing ever written to stdout.
 An existing OUTPUT is never clobbered by accident, derived names included: `lucio`
 refuses to run unless `-O` / `--overwrite-files` is given. The check happens before
 the template is parsed, so a refusal costs nothing and executes no block.
+
+Each block is given 60 seconds to run, after which the whole run is aborted; pass
+`--timeout` to raise or lower that, or `--timeout -1` to let the blocks take as long
+as they need.
 
 ### Logging
 

@@ -20,9 +20,23 @@ from lucio.renderer import render_document
 EXIT_EXECUTION_ERROR = 4
 EXIT_TEMPLATE_ERROR = 3
 EXIT_WRITE_ERROR = 1
+NO_TIMEOUT = -1.0
 OUTPUT_SUFFIX = ".md"
 STDOUT_PATH = "-"
 TEMPLATE_SUFFIX = ".template.md"
+
+
+# Defined before the command, which references it as the callback of --timeout
+def _validate_timeout(
+    ctx: click.Context, param: click.Parameter, value: float
+) -> float | None:
+    """Return the seconds a block may run for, or None for no timeout at all."""
+    del ctx, param
+    if value == NO_TIMEOUT:
+        return None
+    if value <= 0:
+        raise click.BadParameter(f"must be positive, or {NO_TIMEOUT:g} for no timeout")
+    return value
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
@@ -35,10 +49,11 @@ TEMPLATE_SUFFIX = ".template.md"
 )
 @click.option(
     "--timeout",
-    type=click.FloatRange(min=0, min_open=True),
-    default=120.0,
+    type=float,
+    default=60.0,
     show_default=True,
-    help="Per-block execution timeout, in seconds.",
+    callback=_validate_timeout,
+    help="Per-block execution timeout, in seconds; -1 for no timeout.",
 )
 @click.option(
     "-O",
@@ -68,7 +83,7 @@ def main(
     output_file: Path | None,
     color: bool,
     overwrite_files: bool,
-    timeout: float,
+    timeout: float | None,
     verbose: bool,
 ) -> None:
     """Render the Markdown template INPUT into OUTPUT, executing its lucio blocks.

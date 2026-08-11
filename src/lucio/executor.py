@@ -10,11 +10,12 @@ from lucio.errors import ExecutionError, ExecutionTimeoutError, ExitCodeMismatch
 from lucio.model import BlockSegment, ExecutionResult
 
 
-def execute_block(block: BlockSegment, source: str, timeout: float) -> ExecutionResult:
+def execute_block(block: BlockSegment, source: str, timeout: float | None) -> ExecutionResult:
     """Run the body of ``block`` in its own bash subprocess and capture its streams.
 
     The body is passed verbatim, nothing is injected; the working directory and the
-    environment of the lucio process are inherited; stdin is /dev/null.
+    environment of the lucio process are inherited; stdin is /dev/null. A None timeout
+    lets the block run for as long as it needs.
     """
     try:
         process = subprocess.run(
@@ -28,7 +29,8 @@ def execute_block(block: BlockSegment, source: str, timeout: float) -> Execution
             timeout=timeout,
         )
     except subprocess.TimeoutExpired as exc:
-        raise ExecutionTimeoutError(source, block.line, timeout) from exc
+        # exc carries the timeout that expired, which cannot be None here
+        raise ExecutionTimeoutError(source, block.line, exc.timeout) from exc
     except OSError as exc:
         raise ExecutionError(source, block.line, f"cannot run bash: {exc}") from exc
 

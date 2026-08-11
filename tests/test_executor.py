@@ -112,6 +112,19 @@ class TestExitPolicy:
         assert (excinfo.value.expected, excinfo.value.actual) == (1, 0)
 
 
+class TestNoTimeout:
+    def test_a_block_runs_without_a_ceiling(self):
+        assert run("sleep 0.3\necho done\n", timeout=None).stdout == "done\n"
+
+    def test_none_reaches_the_subprocess(self, mocker):
+        completed = mocker.patch(
+            "lucio.executor.subprocess.run",
+            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+        )
+        execute_block(make_block("echo hi\n"), SOURCE, None)
+        assert completed.call_args.kwargs["timeout"] is None
+
+
 class TestFailures:
     def test_timeout(self):
         with pytest.raises(ExecutionTimeoutError) as excinfo:

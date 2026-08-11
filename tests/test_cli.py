@@ -53,10 +53,12 @@ class TestOptions:
     def test_help(self, flag):
         result = run(flag)
         assert result.exit_code == 0
-        assert "INPUT [OUTPUT]" in result.stdout
-        assert "-O, --overwrite-files" in result.stdout
-        assert "--timeout" in result.stdout
-        assert "--verbose" in result.stdout
+        # The help is wrapped to the terminal width, so match on the unwrapped text
+        unwrapped = " ".join(result.stdout.split())
+        assert "INPUT [OUTPUT]" in unwrapped
+        assert "-O, --overwrite-files" in unwrapped
+        assert "-1 for no timeout. [default: 60.0]" in unwrapped
+        assert "--verbose" in unwrapped
 
 
 class TestUsageErrors:
@@ -81,10 +83,12 @@ class TestUsageErrors:
         result = run(INPUT, str(workspace / INPUT))
         assert result.exit_code == 2
 
-    @pytest.mark.parametrize("timeout", ["0", "-1"])
+    @pytest.mark.parametrize("timeout", ["0", "-2", "-0.5"])
     def test_non_positive_timeout(self, workspace, timeout):
         (workspace / INPUT).write_text("text\n", encoding="utf-8")
-        assert run("--timeout", timeout, INPUT, OUTPUT).exit_code == 2
+        result = run("--timeout", timeout, INPUT, OUTPUT)
+        assert result.exit_code == 2
+        assert "must be positive, or -1 for no timeout" in result.stderr
 
 
 class TestRendering:
@@ -464,6 +468,11 @@ class TestFailures:
         assert result.exit_code == 4
         assert "timed out after 0.2 seconds" in result.stderr
         assert not output.exists()
+
+    def test_no_timeout_lets_a_slow_block_finish(self, workspace):
+        result, output = render(workspace, "```bash lucio\nsleep 0.3\n```\n", "--timeout", "-1")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == "```bash\nsleep 0.3\n```\n"
 
     def test_undecodable_input_exits_three(self, workspace):
         (workspace / INPUT).write_bytes(b"# Title\n\n\xff\xfe not utf-8\n")
