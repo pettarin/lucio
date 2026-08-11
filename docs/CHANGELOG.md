@@ -16,7 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `-O` / `--overwrite-files` option, required to overwrite an existing OUTPUT
 - `-C` / `--do-not-color` option
 - `-P` / `--pager` option, printing the document through a pager when on a terminal
-- `-V` and `-t` as short forms of `--version` and `--timeout`
+- `-V` as short form of `--version`
+- `-t` / `--total-timeout` option, bounding the whole run, 300 seconds by default
 - Open the rendered document with a comment naming the template it came from,
   omitted by the `-E` / `--omit-edit-comment` option
 - Log the settings of the run at `DEBUG` level, before the first block is executed:
@@ -24,7 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Default `--timeout` to 60 seconds, and accept `-1` for no timeout at all
+- Rename `--timeout` to `-b` / `--block-timeout`, default it to 60 seconds, and accept
+  `-1` for no timeout at all
 - Name the attribute that permitted a non-zero exit code in the verbose log,
   as `exit code 1 (permitted by exit=1)`
 - Log the messages of the tool through the `lucio` logger, as

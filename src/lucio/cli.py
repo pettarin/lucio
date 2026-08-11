@@ -5,6 +5,7 @@
 """
 
 import sys
+import time
 from pathlib import Path
 from typing import NoReturn
 
@@ -12,7 +13,7 @@ import click
 
 from lucio import __version__
 from lucio.console import debug, error, info, setup_console
-from lucio.errors import ExecutionError, TemplateError
+from lucio.errors import ExecutionError, ExecutionTimeoutError, TemplateError, TotalTimeoutError
 from lucio.executor import execute_block
 from lucio.model import BlockSegment, ExecutionResult
 from lucio.parser import parse_template
@@ -41,6 +42,15 @@ def _validate_timeout(
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.option(
+    "-b",
+    "--block-timeout",
+    type=float,
+    default=60.0,
+    show_default=True,
+    callback=_validate_timeout,
+    help="Timeout for one block, in seconds; -1 for no timeout.",
+)
 @click.option(
     "-C",
     "--do-not-color",
@@ -71,12 +81,12 @@ def _validate_timeout(
 )
 @click.option(
     "-t",
-    "--timeout",
+    "--total-timeout",
     type=float,
-    default=60.0,
+    default=300.0,
     show_default=True,
     callback=_validate_timeout,
-    help="Per-block execution timeout, in seconds; -1 for no timeout.",
+    help="Timeout for the whole run, in seconds; -1 for no timeout.",
 )
 @click.option(
     "-v",
@@ -98,11 +108,12 @@ def _validate_timeout(
 def main(
     input_file: Path,
     output_file: Path | None,
+    block_timeout: float | None,
     do_not_color: bool,
     omit_edit_comment: bool,
     overwrite_files: bool,
     pager: bool,
-    timeout: float | None,
+    total_timeout: float | None,
     verbose: bool,
 ) -> None:
     """Render the Markdown template INPUT into OUTPUT, executing its lucio blocks.
@@ -118,8 +129,17 @@ def main(
     so a failing block leaves OUTPUT untouched.
     """
     setup_console(color=not do_not_color, verbose=verbose)
+    deadline = None if total_timeout is None else time.monotonic() + total_timeout
     destination = _resolve_output(input_file, output_file)
-    _log_settings(input_file, destination, omit_edit_comment, overwrite_files, pager, timeout)
+    _log_settings(
+        input_file,
+        destination,
+        block_timeout,
+        omit_edit_comment,
+        overwrite_files,
+        pager,
+        total_timeout,
+    )
     if destination is not None:
         if input_file.resolve() == destination.resolve():
             raise click.UsageError("INPUT and OUTPUT must be different files")
@@ -134,7 +154,14 @@ def main(
 
     def runner(block: BlockSegment) -> ExecutionResult:
         debug(f"{source}:{block.line}: executing bash {block.kind.value} block")
-        result = execute_block(block, source, timeout)
+        allowed = _remaining_timeout(block_timeout, deadline, source, block.line, total_timeout)
+        try:
+            result = execute_block(block, source, allowed)
+        except ExecutionTimeoutError:
+            # The budget, not the block ceiling, is what cut this block short
+            if allowed != block_timeout:
+                raise TotalTimeoutError(source, block.line, total_timeout or 0.0) from None
+            raise
         permitted = _permitted_by(block, result.exit_code)
         debug(f"{source}:{block.line}: exit code {result.exit_code}{permitted}")
         return result
@@ -189,10 +216,11 @@ def _fail(message: str, code: int) -> NoReturn:
 def _log_settings(
     input_file: Path,
     destination: Path | None,
+    block_timeout: float | None,
     omit_edit_comment: bool,
     overwrite_files: bool,
     pager: bool,
-    timeout: float | None,
+    total_timeout: float | None,
 ) -> None:
     """Log the settings of the run, one per line, before anything is read or executed."""
     debug(f'Input file: "{input_file.resolve()}"')
@@ -203,7 +231,8 @@ def _log_settings(
     debug(f"Edit comment: {not omit_edit_comment}")
     debug(f"Overwrite files: {overwrite_files}")
     debug(f"Pager: {pager}")
-    debug("Block timeout: none" if timeout is None else f"Block timeout: {timeout} seconds")
+    debug(_timeout_setting("Block timeout", block_timeout))
+    debug(_timeout_setting("Total timeout", total_timeout))
 
 
 def _permitted_by(block: BlockSegment, exit_code: int) -> str:
@@ -230,6 +259,26 @@ def _read_template(input_file: Path, source: str) -> str:
     return text.replace("\r\n", "\n")
 
 
+def _remaining_timeout(
+    block_timeout: float | None,
+    deadline: float | None,
+    source: str,
+    line: int,
+    total_timeout: float | None,
+) -> float | None:
+    """Return the seconds this block may run for, raising once the budget is spent.
+
+    A block never outlives the deadline of the run, so the total is a real bound and
+    not merely a check between one block and the next.
+    """
+    if deadline is None:
+        return block_timeout
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TotalTimeoutError(source, line, total_timeout or 0.0)
+    return remaining if block_timeout is None else min(block_timeout, remaining)
+
+
 def _resolve_output(input_file: Path, output_file: Path | None) -> Path | None:
     """Return the file to render into, or None to print the document on stdout."""
     if output_file is not None:
@@ -239,6 +288,11 @@ def _resolve_output(input_file: Path, output_file: Path | None) -> Path | None:
         if name.endswith(suffix):
             return input_file.with_name(f"{name[: -len(suffix)]}{OUTPUT_SUFFIX}")
     return None
+
+
+def _timeout_setting(label: str, timeout: float | None) -> str:
+    """Return the settings line for a timeout, which may be disabled."""
+    return f"{label}: none" if timeout is None else f"{label}: {timeout} seconds"
 
 
 def _use_pager(pager: bool) -> bool:

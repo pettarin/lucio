@@ -13,6 +13,7 @@ from lucio.errors import (
     LucioError,
     TemplateError,
     TemplateSyntaxError,
+    TotalTimeoutError,
 )
 
 # The package logs under the "lucio" logger; without a handler of the user's (the
@@ -30,4 +31,5 @@ __all__ = [
     "LucioError",
     "TemplateError",
     "TemplateSyntaxError",
+    "TotalTimeoutError",
 ]

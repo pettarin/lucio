@@ -13,6 +13,7 @@ from lucio.errors import (
     LucioError,
     TemplateError,
     TemplateSyntaxError,
+    TotalTimeoutError,
 )
 
 
@@ -25,6 +26,7 @@ class TestHierarchy:
             (ExitCodeMismatchError, ExecutionError),
             (TemplateError, LucioError),
             (TemplateSyntaxError, TemplateError),
+            (TotalTimeoutError, ExecutionError),
         ],
     )
     def test_is_subclass(self, child, parent):
@@ -73,6 +75,18 @@ class TestExecutionTimeoutError:
 
     def test_timeout_is_kept(self):
         assert ExecutionTimeoutError("doc.template.md", 7, 0.5).timeout == 0.5
+
+
+class TestTotalTimeoutError:
+    def test_message_names_the_timeout(self):
+        error = TotalTimeoutError("doc.template.md", 7, 300.0)
+        assert str(error) == "doc.template.md:7: total timeout of 300.0 seconds exceeded"
+
+    def test_timeout_is_kept(self):
+        assert TotalTimeoutError("doc.template.md", 7, 300.0).timeout == 300.0
+
+    def test_it_is_not_a_block_timeout(self):
+        assert not isinstance(TotalTimeoutError("doc.template.md", 1, 1.0), ExecutionTimeoutError)
 
 
 class TestExitCodeMismatchError:

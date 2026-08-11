@@ -50,3 +50,11 @@ class ExitCodeMismatchError(ExecutionError):
 
 class TemplateSyntaxError(TemplateError):
     """A template violates the lucio fence or attribute grammar."""
+
+
+class TotalTimeoutError(ExecutionError):
+    """The run as a whole outlasted its budget."""
+
+    def __init__(self, path: str, line: int, timeout: float) -> None:
+        super().__init__(path, line, f"total timeout of {timeout} seconds exceeded")
+        self.timeout = timeout

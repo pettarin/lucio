@@ -6,12 +6,14 @@
 
 import os
 import re
+import time
 
 import pytest
 from click.testing import CliRunner
 
 from lucio import __version__
-from lucio.cli import _use_pager, main
+from lucio.cli import _remaining_timeout, _use_pager, main
+from lucio.errors import TotalTimeoutError
 
 INPUT = "doc.template.md"
 OUTPUT = "doc.md"
@@ -28,7 +30,13 @@ def unstamped(text):
 
 
 def settings(
-    workspace, output=OUTPUT, comment=False, overwrite=False, pager=False, timeout="60.0 seconds"
+    workspace,
+    output=OUTPUT,
+    block="60.0 seconds",
+    comment=False,
+    overwrite=False,
+    pager=False,
+    total="300.0 seconds",
 ):
     """Return the settings lines that -v prints before anything is executed."""
     destination = "standard output" if output is None else f'"{(workspace / output).resolve()}"'
@@ -38,7 +46,8 @@ def settings(
         f"[DEBU] Edit comment: {comment}\n"
         f"[DEBU] Overwrite files: {overwrite}\n"
         f"[DEBU] Pager: {pager}\n"
-        f"[DEBU] Block timeout: {timeout}\n"
+        f"[DEBU] Block timeout: {block}\n"
+        f"[DEBU] Total timeout: {total}\n"
     )
 
 
@@ -81,8 +90,10 @@ class TestOptions:
         assert "-E, --omit-edit-comment" in unwrapped
         assert "-O, --overwrite-files" in unwrapped
         assert "-P, --pager" in unwrapped
-        assert "-t, --timeout FLOAT" in unwrapped
+        assert "-b, --block-timeout FLOAT" in unwrapped
         assert "-1 for no timeout. [default: 60.0]" in unwrapped
+        assert "-t, --total-timeout FLOAT" in unwrapped
+        assert "-1 for no timeout. [default: 300.0]" in unwrapped
         assert "-v, --verbose" in unwrapped
         assert "-V, --version" in unwrapped
 
@@ -122,14 +133,14 @@ class TestUsageErrors:
         result = run(INPUT, str(workspace / INPUT))
         assert result.exit_code == 2
 
-    @pytest.mark.parametrize("option", ["--no-pager", "-G", "--color", "--no-color"])
+    @pytest.mark.parametrize("option", ["--no-pager", "-G", "--color", "--no-color", "--timeout"])
     def test_the_removed_spellings(self, workspace, option):
         (workspace / INPUT).write_text("text\n", encoding="utf-8")
         result = run(option, INPUT, OUTPUT)
         assert result.exit_code == 2
         assert "No such option" in result.stderr
 
-    @pytest.mark.parametrize("option", ["-t", "--timeout"])
+    @pytest.mark.parametrize("option", ["-b", "--block-timeout"])
     @pytest.mark.parametrize("timeout", ["0", "-2", "-0.5"])
     def test_non_positive_timeout(self, workspace, option, timeout):
         (workspace / INPUT).write_text("text\n", encoding="utf-8")
@@ -652,12 +663,14 @@ class TestVerbose:
         assert "[DEBU] Overwrite files: True\n" in unstamped(result.stderr)
 
     def test_the_settings_report_a_disabled_timeout(self, workspace):
-        result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v", "--timeout", "-1")
+        template = "```bash lucio\necho hi\n```\n"
+        result, _ = render(workspace, template, "-v", "--block-timeout", "-1")
         assert result.exit_code == 0
         assert "[DEBU] Block timeout: none\n" in unstamped(result.stderr)
 
     def test_the_settings_report_a_custom_timeout(self, workspace):
-        result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v", "--timeout", "0.5")
+        template = "```bash lucio\necho hi\n```\n"
+        result, _ = render(workspace, template, "-v", "--block-timeout", "0.5")
         assert result.exit_code == 0
         assert "[DEBU] Block timeout: 0.5 seconds\n" in unstamped(result.stderr)
 
@@ -714,12 +727,13 @@ class TestFailures:
         assert output.read_text(encoding="utf-8") == "previous content\n"
 
     def test_timeout_exits_four(self, workspace):
-        result, output = render(workspace, "```bash lucio\nsleep 5\n```\n", "--timeout", "0.2")
+        template = "```bash lucio\nsleep 5\n```\n"
+        result, output = render(workspace, template, "--block-timeout", "0.2")
         assert result.exit_code == 4
         assert "timed out after 0.2 seconds" in result.stderr
         assert not output.exists()
 
-    @pytest.mark.parametrize("option", ["-t", "--timeout"])
+    @pytest.mark.parametrize("option", ["-b", "--block-timeout"])
     def test_no_timeout_lets_a_slow_block_finish(self, workspace, option):
         result, output = render(workspace, "```bash lucio\nsleep 0.3\n```\n", option, "-1")
         assert result.exit_code == 0
@@ -751,3 +765,74 @@ class TestFailures:
         result = run(INPUT, "missing_directory/doc.md")
         assert result.exit_code == 1
         assert "[ERRO] missing_directory/doc.md" in unstamped(result.stderr)
+
+
+class TestTotalTimeout:
+    SLOW = "```bash lucio\nsleep 0.4\n```\n\n```bash lucio\nsleep 0.4\n```\n"
+
+    def test_the_budget_stops_the_run(self, workspace):
+        result, output = render(workspace, self.SLOW, "-t", "0.5")
+        assert result.exit_code == 4
+        assert "total timeout of 0.5 seconds exceeded" in result.stderr
+        assert not output.exists()
+
+    def test_the_total_is_reported_rather_than_the_block(self, workspace):
+        result, _ = render(workspace, self.SLOW, "-t", "0.5", "-b", "60")
+        assert result.exit_code == 4
+        assert "total timeout" in result.stderr
+        assert "block timed out" not in result.stderr
+
+    def test_the_run_does_not_outlast_the_budget(self, workspace):
+        started = time.monotonic()
+        result, _ = render(workspace, self.SLOW, "-t", "0.5", "-b", "-1")
+        assert result.exit_code == 4
+        # Two 0.4s blocks would take 0.8s; the budget must cut the second one short
+        assert time.monotonic() - started < 0.8
+
+    @pytest.mark.parametrize("option", ["-t", "--total-timeout"])
+    def test_it_can_be_disabled(self, workspace, option):
+        result, output = render(workspace, self.SLOW, option, "-1")
+        assert result.exit_code == 0
+        assert output.exists()
+
+    def test_a_generous_budget_is_invisible(self, workspace):
+        result, output = render(workspace, self.SLOW, "-t", "60")
+        assert result.exit_code == 0
+        assert output.exists()
+
+    @pytest.mark.parametrize("timeout", ["0", "-2", "-0.5"])
+    def test_non_positive_values_are_usage_errors(self, workspace, timeout):
+        (workspace / INPUT).write_text("text\n", encoding="utf-8")
+        result = run("-t", timeout, INPUT, OUTPUT)
+        assert result.exit_code == 2
+        assert "must be positive, or -1 for no timeout" in result.stderr
+
+    def test_a_spent_budget_stops_the_next_block(self):
+        # Reaching this end to end would need a block to finish exactly on the deadline
+        with pytest.raises(TotalTimeoutError) as excinfo:
+            _remaining_timeout(60.0, time.monotonic() - 1, INPUT, 3, 5.0)
+        assert str(excinfo.value) == f"{INPUT}:3: total timeout of 5.0 seconds exceeded"
+
+    @pytest.mark.parametrize(
+        ("block_timeout", "deadline_in", "expected"),
+        [
+            (60.0, None, 60.0),
+            (None, None, None),
+            (0.5, 60.0, 0.5),
+            (None, 60.0, 60.0),
+        ],
+    )
+    def test_the_ceiling_is_the_smaller_of_the_two(self, block_timeout, deadline_in, expected):
+        deadline = None if deadline_in is None else time.monotonic() + deadline_in
+        allowed = _remaining_timeout(block_timeout, deadline, INPUT, 1, deadline_in)
+        if expected is None:
+            assert allowed is None
+        else:
+            assert allowed == pytest.approx(expected, abs=0.1)
+
+    def test_the_settings_report_both_timeouts(self, workspace):
+        result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v", "-t", "-1")
+        assert result.exit_code == 0
+        stderr = unstamped(result.stderr)
+        assert "[DEBU] Block timeout: 60.0 seconds\n" in stderr
+        assert "[DEBU] Total timeout: none\n" in stderr

@@ -127,18 +127,20 @@ Usage: lucio [OPTIONS] INPUT [OUTPUT]
   succeeded, so a failing block leaves OUTPUT untouched.
 
 Options:
-  -C, --do-not-color       Do not color the messages of the tool.
-  -E, --omit-edit-comment  Do not open the rendered document with the do-not-
-                           edit comment.
-  -O, --overwrite-files    Overwrite OUTPUT if it already exists.
-  -P, --pager              Print the data output through a pager (when on a
-                           terminal).
-  -t, --timeout FLOAT      Per-block execution timeout, in seconds; -1 for no
-                           timeout.  [default: 60.0]
-  -v, --verbose            Log each executed block and its exit code to
-                           stderr.
-  -V, --version            Show the version and exit.
-  -h, --help               Show this message and exit.
+  -b, --block-timeout FLOAT  Timeout for one block, in seconds; -1 for no
+                             timeout.  [default: 60.0]
+  -C, --do-not-color         Do not color the messages of the tool.
+  -E, --omit-edit-comment    Do not open the rendered document with the do-
+                             not-edit comment.
+  -O, --overwrite-files      Overwrite OUTPUT if it already exists.
+  -P, --pager                Print the data output through a pager (when on a
+                             terminal).
+  -t, --total-timeout FLOAT  Timeout for the whole run, in seconds; -1 for no
+                             timeout.  [default: 300.0]
+  -v, --verbose              Log each executed block and its exit code to
+                             stderr.
+  -V, --version              Show the version and exit.
+  -h, --help                 Show this message and exit.
 ```
 
 INPUT is required; OUTPUT is optional, and the two must resolve to different files.
@@ -196,9 +198,14 @@ a blank line, so that whoever finds the generated file knows what to edit instea
 `-E` / `--omit-edit-comment` leaves it out. On stdout, where there is no rendered
 file to name, the comment mentions the template alone.
 
-Each block is given 60 seconds to run, after which the whole run is aborted; pass
-`-t` / `--timeout` to raise or lower that, or `-t -1` to let the blocks take as long
-as they need.
+Two timeouts bound a run: each block is given 60 seconds, and the run as a whole is
+given 300. Pass `-b` / `--block-timeout` and `-t` / `--total-timeout` to raise or
+lower either, or `-1` to disable it.
+
+The total is a real bound, not a check between one block and the next: a block is
+never given more time than the run has left, so it is cut short when the budget runs
+out, and the failure is reported as the total timeout rather than the block one.
+Either way the run is aborted and OUTPUT is not written.
 
 ### Logging
 
