@@ -64,8 +64,9 @@ def render(workspace, template, *arguments):
 
 
 class TestOptions:
-    def test_version(self):
-        result = run("--version")
+    @pytest.mark.parametrize("flag", ["-V", "--version"])
+    def test_version(self, flag):
+        result = run(flag)
         assert result.exit_code == 0
         assert result.stdout == f"lucio, version {__version__}\n"
 
@@ -79,8 +80,10 @@ class TestOptions:
         assert "-E, --omit-edit-comment" in unwrapped
         assert "-O, --overwrite-files" in unwrapped
         assert "-P, --pager" in unwrapped
+        assert "-t, --timeout FLOAT" in unwrapped
         assert "-1 for no timeout. [default: 60.0]" in unwrapped
-        assert "--verbose" in unwrapped
+        assert "-v, --verbose" in unwrapped
+        assert "-V, --version" in unwrapped
 
 
 class TestUsageErrors:
@@ -112,10 +115,11 @@ class TestUsageErrors:
         assert result.exit_code == 2
         assert "No such option" in result.stderr
 
+    @pytest.mark.parametrize("option", ["-t", "--timeout"])
     @pytest.mark.parametrize("timeout", ["0", "-2", "-0.5"])
-    def test_non_positive_timeout(self, workspace, timeout):
+    def test_non_positive_timeout(self, workspace, option, timeout):
         (workspace / INPUT).write_text("text\n", encoding="utf-8")
-        result = run("--timeout", timeout, INPUT, OUTPUT)
+        result = run(option, timeout, INPUT, OUTPUT)
         assert result.exit_code == 2
         assert "must be positive, or -1 for no timeout" in result.stderr
 
@@ -701,8 +705,9 @@ class TestFailures:
         assert "timed out after 0.2 seconds" in result.stderr
         assert not output.exists()
 
-    def test_no_timeout_lets_a_slow_block_finish(self, workspace):
-        result, output = render(workspace, "```bash lucio\nsleep 0.3\n```\n", "--timeout", "-1")
+    @pytest.mark.parametrize("option", ["-t", "--timeout"])
+    def test_no_timeout_lets_a_slow_block_finish(self, workspace, option):
+        result, output = render(workspace, "```bash lucio\nsleep 0.3\n```\n", option, "-1")
         assert result.exit_code == 0
         assert output.read_text(encoding="utf-8") == "```bash\nsleep 0.3\n```\n"
 

@@ -166,7 +166,7 @@ a blank line, so that whoever finds the generated file knows what to edit instea
 file to name, the comment mentions the template alone.
 
 Each block is given 60 seconds to run, after which the whole run is aborted; pass
-`--timeout` to raise or lower that, or `--timeout -1` to let the blocks take as long
+`-t` / `--timeout` to raise or lower that, or `-t -1` to let the blocks take as long
 as they need.
 
 ### Logging

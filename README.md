@@ -127,18 +127,18 @@ Usage: lucio [OPTIONS] INPUT [OUTPUT]
   succeeded, so a failing block leaves OUTPUT untouched.
 
 Options:
-  --version                Show the version and exit.
   --color / --no-color     Color the messages of the tool (when the terminal
                            supports it).  [default: color]
-  --timeout FLOAT          Per-block execution timeout, in seconds; -1 for no
-                           timeout.  [default: 60.0]
   -E, --omit-edit-comment  Do not open the rendered document with the do-not-
                            edit comment.
   -O, --overwrite-files    Overwrite OUTPUT if it already exists.
   -P, --pager              Print the data output through a pager (when on a
                            terminal).
+  -t, --timeout FLOAT      Per-block execution timeout, in seconds; -1 for no
+                           timeout.  [default: 60.0]
   -v, --verbose            Log each executed block and its exit code to
                            stderr.
+  -V, --version            Show the version and exit.
   -h, --help               Show this message and exit.
 ```
 
@@ -198,7 +198,7 @@ a blank line, so that whoever finds the generated file knows what to edit instea
 file to name, the comment mentions the template alone.
 
 Each block is given 60 seconds to run, after which the whole run is aborted; pass
-`--timeout` to raise or lower that, or `--timeout -1` to let the blocks take as long
+`-t` / `--timeout` to raise or lower that, or `-t -1` to let the blocks take as long
 as they need.
 
 ### Logging

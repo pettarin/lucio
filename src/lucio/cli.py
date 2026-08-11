@@ -41,20 +41,11 @@ def _validate_timeout(
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option(version=__version__, prog_name="lucio")
 @click.option(
     "--color/--no-color",
     default=True,
     show_default=True,
     help="Color the messages of the tool (when the terminal supports it).",
-)
-@click.option(
-    "--timeout",
-    type=float,
-    default=60.0,
-    show_default=True,
-    callback=_validate_timeout,
-    help="Per-block execution timeout, in seconds; -1 for no timeout.",
 )
 @click.option(
     "-E",
@@ -78,12 +69,22 @@ def _validate_timeout(
     help="Print the data output through a pager (when on a terminal).",
 )
 @click.option(
+    "-t",
+    "--timeout",
+    type=float,
+    default=60.0,
+    show_default=True,
+    callback=_validate_timeout,
+    help="Per-block execution timeout, in seconds; -1 for no timeout.",
+)
+@click.option(
     "-v",
     "--verbose",
     is_flag=True,
     default=False,
     help="Log each executed block and its exit code to stderr.",
 )
+@click.version_option(__version__, "-V", "--version", prog_name="lucio")
 @click.argument(
     "input_file", metavar="INPUT", type=click.Path(exists=True, dir_okay=False, path_type=Path)
 )
