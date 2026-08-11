@@ -109,10 +109,10 @@ Usage: lucio [OPTIONS] INPUT [OUTPUT]
 
   Render the Markdown template INPUT into OUTPUT, executing its lucio blocks.
 
-  Without OUTPUT, an INPUT named NAME.template.md is rendered into NAME.md,
-  and any other INPUT is printed on stdout. An OUTPUT of "-" always means
-  stdout, and the diagnostics of the tool always go to stderr, so the two
-  never mix.
+  Without OUTPUT, an INPUT named NAME.template.md or NAME.tmd is rendered into
+  NAME.md, and any other INPUT is printed on stdout. An OUTPUT of "-" always
+  means stdout, and the diagnostics of the tool always go to stderr, so the
+  two never mix.
 
   The template is rendered in memory and written out only once everything
   succeeded, so a failing block leaves OUTPUT untouched.
@@ -134,6 +134,7 @@ Where the rendered document ends up depends on the two arguments:
 | INPUT | OUTPUT | destination |
 |---|---|---|
 | `NAME.template.md` | *(omitted)* | `NAME.md`, next to INPUT |
+| `NAME.tmd` | *(omitted)* | `NAME.md`, next to INPUT |
 | anything else | *(omitted)* | stdout |
 | anything | `-` | stdout |
 | anything | a path | that path |
@@ -142,9 +143,10 @@ So the common case needs one argument only:
 
 ```bash
 $ lucio README.template.md          # writes README.md
+$ lucio README.tmd                  # the short suffix, same result
 ```
 
-The `.template.md` suffix is the only name `lucio` reads anything into; `OUTPUTFILE.md`
+Those two suffixes are the only names `lucio` reads anything into; `OUTPUTFILE.md`
 is a convention of this documentation, not a rule.
 
 An OUTPUT of `-` prints the document instead of writing it, which keeps `lucio` usable

@@ -23,7 +23,7 @@ EXIT_WRITE_ERROR = 1
 NO_TIMEOUT = -1.0
 OUTPUT_SUFFIX = ".md"
 STDOUT_PATH = "-"
-TEMPLATE_SUFFIX = ".template.md"
+TEMPLATE_SUFFIXES = (".template.md", ".tmd")
 
 
 # Defined before the command, which references it as the callback of --timeout
@@ -88,9 +88,9 @@ def main(
 ) -> None:
     """Render the Markdown template INPUT into OUTPUT, executing its lucio blocks.
 
-    Without OUTPUT, an INPUT named NAME.template.md is rendered into NAME.md, and any
-    other INPUT is printed on stdout. An OUTPUT of "-" always means stdout, and the
-    diagnostics of the tool always go to stderr, so the two never mix.
+    Without OUTPUT, an INPUT named NAME.template.md or NAME.tmd is rendered into
+    NAME.md, and any other INPUT is printed on stdout. An OUTPUT of "-" always means
+    stdout, and the diagnostics of the tool always go to stderr, so the two never mix.
 
     The template is rendered in memory and written out only once everything succeeded,
     so a failing block leaves OUTPUT untouched.
@@ -187,8 +187,9 @@ def _resolve_output(input_file: Path, output_file: Path | None) -> Path | None:
     if output_file is not None:
         return None if str(output_file) == STDOUT_PATH else output_file
     name = input_file.name
-    if name.endswith(TEMPLATE_SUFFIX):
-        return input_file.with_name(f"{name[: -len(TEMPLATE_SUFFIX)]}{OUTPUT_SUFFIX}")
+    for suffix in TEMPLATE_SUFFIXES:
+        if name.endswith(suffix):
+            return input_file.with_name(f"{name[: -len(suffix)]}{OUTPUT_SUFFIX}")
     return None
 
 

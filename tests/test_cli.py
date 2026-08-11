@@ -297,11 +297,12 @@ class TestStandardOutput:
 
 
 class TestDerivedOutput:
-    def test_template_input_renders_into_its_md_sibling(self, workspace):
-        (workspace / INPUT).write_text(
+    @pytest.mark.parametrize("name", ["doc.template.md", "doc.tmd"])
+    def test_template_input_renders_into_its_md_sibling(self, workspace, name):
+        (workspace / name).write_text(
             "# Title\n\n```bash lucio\necho hello\n```\n", encoding="utf-8"
         )
-        result = run(INPUT)
+        result = run(name)
         assert result.exit_code == 0
         assert result.stdout == ""
         assert (workspace / OUTPUT).read_text(encoding="utf-8") == (
@@ -316,13 +317,24 @@ class TestDerivedOutput:
         assert (workspace / "docs" / OUTPUT).exists()
         assert not (workspace / OUTPUT).exists()
 
-    def test_a_bare_template_suffix_derives_a_bare_md(self, workspace):
-        (workspace / ".template.md").write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        result = run(".template.md")
+    @pytest.mark.parametrize("name", [".template.md", ".tmd"])
+    def test_a_bare_template_suffix_derives_a_bare_md(self, workspace, name):
+        (workspace / name).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
+        result = run(name)
         assert result.exit_code == 0
         assert (workspace / ".md").read_text(encoding="utf-8") == "```bash\necho hi\nhi\n```\n"
 
-    @pytest.mark.parametrize("name", ["notes.md", "notes.template.txt", "notes.md.template"])
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "notes.md",
+            "notes.template.txt",
+            "notes.md.template",
+            "notes.tmd.md",
+            "notes.tmdx",
+            "notes.tm",
+        ],
+    )
     def test_any_other_input_still_goes_to_stdout(self, workspace, name):
         (workspace / name).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
         result = run(name)
@@ -376,6 +388,18 @@ class TestOverwriteGuard:
             f"[ERRO] {OUTPUT}: file exists (use --overwrite-files to overwrite)\n"
         )
         assert (workspace / OUTPUT).read_text(encoding="utf-8") == "previous content\n"
+
+    def test_an_output_derived_from_a_tmd_input_is_refused_too(self, workspace):
+        (workspace / "doc.tmd").write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
+        (workspace / OUTPUT).write_text("previous content\n", encoding="utf-8")
+        result = run("doc.tmd")
+        assert result.exit_code == 1
+        assert unstamped(result.stderr) == (
+            f"[ERRO] {OUTPUT}: file exists (use --overwrite-files to overwrite)\n"
+        )
+        assert (workspace / OUTPUT).read_text(encoding="utf-8") == "previous content\n"
+        assert run("-O", "doc.tmd").exit_code == 0
+        assert (workspace / OUTPUT).read_text(encoding="utf-8") == "```bash\necho hi\nhi\n```\n"
 
     def test_no_block_runs_when_the_derived_output_is_refused(self, workspace):
         (workspace / INPUT).write_text(
