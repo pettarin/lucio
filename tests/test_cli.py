@@ -27,12 +27,15 @@ def unstamped(text):
     return _STAMP.sub("", text)
 
 
-def settings(workspace, output=OUTPUT, overwrite=False, pager=False, timeout="60.0 seconds"):
+def settings(
+    workspace, output=OUTPUT, comment=False, overwrite=False, pager=False, timeout="60.0 seconds"
+):
     """Return the settings lines that -v prints before anything is executed."""
     destination = "standard output" if output is None else f'"{(workspace / output).resolve()}"'
     return (
         f'[DEBU] Input file: "{(workspace / INPUT).resolve()}"\n'
         f"[DEBU] Output file: {destination}\n"
+        f"[DEBU] Edit comment: {comment}\n"
         f"[DEBU] Overwrite files: {overwrite}\n"
         f"[DEBU] Pager: {pager}\n"
         f"[DEBU] Block timeout: {timeout}\n"
@@ -50,8 +53,13 @@ def run(*arguments):
 
 
 def render(workspace, template, *arguments):
+    """Render a template into OUTPUT, without the do-not-edit comment.
+
+    The comment is suppressed so the assertions stay about the rendered document;
+    TestEditComment covers the comment itself.
+    """
     (workspace / INPUT).write_text(template, encoding="utf-8")
-    result = run(*arguments, INPUT, OUTPUT)
+    result = run("-E", *arguments, INPUT, OUTPUT)
     return result, workspace / OUTPUT
 
 
@@ -68,6 +76,7 @@ class TestOptions:
         # The help is wrapped to the terminal width, so match on the unwrapped text
         unwrapped = " ".join(result.stdout.split())
         assert "INPUT [OUTPUT]" in unwrapped
+        assert "-E, --omit-edit-comment" in unwrapped
         assert "-O, --overwrite-files" in unwrapped
         assert "-G, --pager / --no-pager" in unwrapped
         assert "on a terminal). [default: no-pager]" in unwrapped
@@ -162,7 +171,7 @@ class TestRendering:
 
     def test_crlf_is_normalized_to_lf(self, workspace):
         (workspace / INPUT).write_bytes(b"# Title\r\n\r\n```bash lucio\r\necho hi\r\n```\r\n")
-        result = run(INPUT, OUTPUT)
+        result = run("-E", INPUT, OUTPUT)
         assert result.exit_code == 0
         assert (workspace / OUTPUT).read_bytes() == b"# Title\n\n```bash\necho hi\nhi\n```\n"
 
@@ -236,7 +245,7 @@ class TestRendering:
         )
         first, output = render(workspace, template)
         first_bytes = output.read_bytes()
-        second = run("--overwrite-files", INPUT, OUTPUT)
+        second = run("-E", "--overwrite-files", INPUT, OUTPUT)
         assert (first.exit_code, second.exit_code) == (0, 0)
         assert output.read_bytes() == first_bytes
 
@@ -250,19 +259,19 @@ class TestStandardOutput:
         (workspace / INPUT).write_text(
             "# Title\n\n```bash lucio\necho hello\n```\n", encoding="utf-8"
         )
-        result = run(INPUT, STDOUT)
+        result = run("-E", INPUT, STDOUT)
         assert result.exit_code == 0
         assert result.stdout == "# Title\n\n```bash\necho hello\nhello\n```\n"
         assert unstamped(result.stderr) == f'[INFO] Rendered "{INPUT}" on the standard output\n'
 
     def test_no_file_is_written(self, workspace):
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        assert run(INPUT, STDOUT).exit_code == 0
+        assert run("-E", INPUT, STDOUT).exit_code == 0
         assert [path.name for path in workspace.iterdir()] == [INPUT]
 
     def test_diagnostics_stay_out_of_the_document(self, workspace):
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        result = run("-v", INPUT, STDOUT)
+        result = run("-E", "-v", INPUT, STDOUT)
         assert result.exit_code == 0
         assert result.stdout == "```bash\necho hi\nhi\n```\n"
         assert unstamped(result.stderr) == (
@@ -274,29 +283,96 @@ class TestStandardOutput:
 
     def test_nothing_is_printed_when_a_block_fails(self, workspace):
         (workspace / INPUT).write_text("```bash lucio\nexit 3\n```\n", encoding="utf-8")
-        result = run(INPUT, STDOUT)
+        result = run("-E", INPUT, STDOUT)
         assert result.exit_code == 4
         assert result.stdout == ""
 
     def test_nothing_is_printed_on_a_syntax_error(self, workspace):
         (workspace / INPUT).write_text("```bash lucio exit=999\necho hi\n```\n", encoding="utf-8")
-        result = run(INPUT, STDOUT)
+        result = run("-E", INPUT, STDOUT)
         assert result.exit_code == 3
         assert result.stdout == ""
 
     def test_overwrite_files_is_harmless_without_a_file(self, workspace):
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        result = run("--overwrite-files", INPUT, STDOUT)
+        result = run("-E", "--overwrite-files", INPUT, STDOUT)
         assert result.exit_code == 0
         assert result.stdout == "```bash\necho hi\nhi\n```\n"
 
     def test_an_existing_file_named_dash_is_not_touched(self, workspace):
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
         (workspace / STDOUT).write_text("not the output\n", encoding="utf-8")
-        result = run(INPUT, STDOUT)
+        result = run("-E", INPUT, STDOUT)
         assert result.exit_code == 0
         assert result.stdout == "```bash\necho hi\nhi\n```\n"
         assert (workspace / STDOUT).read_text(encoding="utf-8") == "not the output\n"
+
+
+class TestEditComment:
+    TEMPLATE = "# Title\n\n```bash lucio\necho hi\n```\n"
+    DOCUMENT = "# Title\n\n```bash\necho hi\nhi\n```\n"
+
+    def test_the_document_opens_with_the_comment(self, workspace):
+        (workspace / INPUT).write_text(self.TEMPLATE, encoding="utf-8")
+        result = run(INPUT)
+        assert result.exit_code == 0
+        assert (workspace / OUTPUT).read_text(encoding="utf-8") == (
+            f"<!-- This file {OUTPUT} has been rendered by CLI tool 'lucio'. "
+            f"Do not edit this file, but rather its template {INPUT} . -->\n"
+            f"\n{self.DOCUMENT}"
+        )
+
+    def test_stdout_gets_the_wording_without_an_output_name(self, workspace):
+        (workspace / INPUT).write_text(self.TEMPLATE, encoding="utf-8")
+        result = run(INPUT, STDOUT)
+        assert result.exit_code == 0
+        assert result.stdout == (
+            "<!-- This file has been rendered by CLI tool 'lucio'. "
+            f"Do not edit this file, but rather its template {INPUT} . -->\n"
+            f"\n{self.DOCUMENT}"
+        )
+
+    @pytest.mark.parametrize("flag", ["-E", "--omit-edit-comment"])
+    def test_the_flag_omits_it(self, workspace, flag):
+        (workspace / INPUT).write_text(self.TEMPLATE, encoding="utf-8")
+        result = run(flag, INPUT, STDOUT)
+        assert result.exit_code == 0
+        assert result.stdout == self.DOCUMENT
+
+    def test_the_flag_omits_it_for_a_file_too(self, workspace):
+        (workspace / INPUT).write_text(self.TEMPLATE, encoding="utf-8")
+        assert run("-E", INPUT).exit_code == 0
+        assert (workspace / OUTPUT).read_text(encoding="utf-8") == self.DOCUMENT
+
+    def test_a_derived_tmd_destination_is_named(self, workspace):
+        (workspace / "doc.tmd").write_text(self.TEMPLATE, encoding="utf-8")
+        assert run("doc.tmd").exit_code == 0
+        assert (workspace / OUTPUT).read_text(encoding="utf-8").startswith(
+            f"<!-- This file {OUTPUT} has been rendered by CLI tool 'lucio'. "
+            "Do not edit this file, but rather its template doc.tmd . -->\n\n"
+        )
+
+    def test_the_names_carry_no_directory(self, workspace):
+        (workspace / "docs").mkdir()
+        (workspace / "docs" / INPUT).write_text(self.TEMPLATE, encoding="utf-8")
+        assert run(f"docs/{INPUT}").exit_code == 0
+        first = (workspace / "docs" / OUTPUT).read_text(encoding="utf-8").splitlines()[0]
+        assert "docs/" not in first
+        assert f"This file {OUTPUT} has been rendered" in first
+        assert f"but rather its template {INPUT} ." in first
+
+    def test_an_empty_document_stays_an_empty_file(self, workspace):
+        (workspace / INPUT).write_text(
+            "```bash lucio show_source=False stdout=False stderr=False\ntrue\n```\n",
+            encoding="utf-8",
+        )
+        assert run(INPUT).exit_code == 0
+        assert (workspace / OUTPUT).read_text(encoding="utf-8") == ""
+
+    def test_the_settings_report_the_comment(self, workspace):
+        (workspace / INPUT).write_text(self.TEMPLATE, encoding="utf-8")
+        assert "[DEBU] Edit comment: True\n" in unstamped(run("-v", INPUT).stderr)
+        assert "[DEBU] Edit comment: False\n" in unstamped(run("-v", "-E", "-O", INPUT).stderr)
 
 
 class TestPager:
@@ -304,7 +380,7 @@ class TestPager:
         mocker.patch("lucio.cli._use_pager", return_value=True)
         paged = mocker.patch("lucio.cli.click.echo_via_pager")
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        result = run("--pager", INPUT, STDOUT)
+        result = run("-E", "--pager", INPUT, STDOUT)
         assert result.exit_code == 0
         paged.assert_called_once_with("```bash\necho hi\nhi\n```\n")
         assert result.stdout == ""
@@ -314,13 +390,13 @@ class TestPager:
         mocker.patch("lucio.cli._use_pager", return_value=True)
         paged = mocker.patch("lucio.cli.click.echo_via_pager")
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        assert run(flag, INPUT, STDOUT).exit_code == 0
+        assert run("-E", flag, INPUT, STDOUT).exit_code == 0
         paged.assert_called_once()
 
     def test_a_redirected_document_is_never_paged(self, workspace, mocker):
         paged = mocker.patch("lucio.cli.click.echo_via_pager")
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        result = run("--pager", INPUT, STDOUT)
+        result = run("-E", "--pager", INPUT, STDOUT)
         assert result.exit_code == 0
         paged.assert_not_called()
         assert result.stdout == "```bash\necho hi\nhi\n```\n"
@@ -337,7 +413,7 @@ class TestPager:
         mocker.patch("lucio.cli.sys.stdout.isatty", return_value=True)
         paged = mocker.patch("lucio.cli.click.echo_via_pager")
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        assert run(INPUT, STDOUT).exit_code == 0
+        assert run("-E", INPUT, STDOUT).exit_code == 0
         paged.assert_not_called()
 
     @pytest.mark.parametrize(
@@ -355,7 +431,7 @@ class TestDerivedOutput:
         (workspace / name).write_text(
             "# Title\n\n```bash lucio\necho hello\n```\n", encoding="utf-8"
         )
-        result = run(name)
+        result = run("-E", name)
         assert result.exit_code == 0
         assert result.stdout == ""
         assert (workspace / OUTPUT).read_text(encoding="utf-8") == (
@@ -365,7 +441,7 @@ class TestDerivedOutput:
     def test_the_sibling_stays_in_the_directory_of_the_input(self, workspace):
         (workspace / "docs").mkdir()
         (workspace / "docs" / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        result = run(f"docs/{INPUT}")
+        result = run("-E", f"docs/{INPUT}")
         assert result.exit_code == 0
         assert (workspace / "docs" / OUTPUT).exists()
         assert not (workspace / OUTPUT).exists()
@@ -373,7 +449,7 @@ class TestDerivedOutput:
     @pytest.mark.parametrize("name", [".template.md", ".tmd"])
     def test_a_bare_template_suffix_derives_a_bare_md(self, workspace, name):
         (workspace / name).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        result = run(name)
+        result = run("-E", name)
         assert result.exit_code == 0
         assert (workspace / ".md").read_text(encoding="utf-8") == "```bash\necho hi\nhi\n```\n"
 
@@ -390,21 +466,21 @@ class TestDerivedOutput:
     )
     def test_any_other_input_still_goes_to_stdout(self, workspace, name):
         (workspace / name).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        result = run(name)
+        result = run("-E", name)
         assert result.exit_code == 0
         assert result.stdout == "```bash\necho hi\nhi\n```\n"
         assert [path.name for path in workspace.iterdir()] == [name]
 
     def test_a_dash_output_beats_the_derived_name(self, workspace):
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        result = run(INPUT, STDOUT)
+        result = run("-E", INPUT, STDOUT)
         assert result.exit_code == 0
         assert result.stdout == "```bash\necho hi\nhi\n```\n"
         assert not (workspace / OUTPUT).exists()
 
     def test_an_explicit_output_beats_the_derived_name(self, workspace):
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        result = run(INPUT, "elsewhere.md")
+        result = run("-E", INPUT, "elsewhere.md")
         assert result.exit_code == 0
         assert (workspace / "elsewhere.md").exists()
         assert not (workspace / OUTPUT).exists()
@@ -435,7 +511,7 @@ class TestOverwriteGuard:
     def test_an_existing_derived_output_is_refused(self, workspace):
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
         (workspace / OUTPUT).write_text("previous content\n", encoding="utf-8")
-        result = run(INPUT)
+        result = run("-E", INPUT)
         assert result.exit_code == 1
         assert unstamped(result.stderr) == (
             f"[ERRO] {OUTPUT}: file exists (use --overwrite-files to overwrite)\n"
@@ -445,13 +521,13 @@ class TestOverwriteGuard:
     def test_an_output_derived_from_a_tmd_input_is_refused_too(self, workspace):
         (workspace / "doc.tmd").write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
         (workspace / OUTPUT).write_text("previous content\n", encoding="utf-8")
-        result = run("doc.tmd")
+        result = run("-E", "doc.tmd")
         assert result.exit_code == 1
         assert unstamped(result.stderr) == (
             f"[ERRO] {OUTPUT}: file exists (use --overwrite-files to overwrite)\n"
         )
         assert (workspace / OUTPUT).read_text(encoding="utf-8") == "previous content\n"
-        assert run("-O", "doc.tmd").exit_code == 0
+        assert run("-E", "-O", "doc.tmd").exit_code == 0
         assert (workspace / OUTPUT).read_text(encoding="utf-8") == "```bash\necho hi\nhi\n```\n"
 
     def test_no_block_runs_when_the_derived_output_is_refused(self, workspace):
@@ -466,7 +542,7 @@ class TestOverwriteGuard:
     def test_the_flag_frees_the_derived_output(self, workspace, flag):
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
         (workspace / OUTPUT).write_text("previous content\n", encoding="utf-8")
-        result = run(flag, INPUT)
+        result = run("-E", flag, INPUT)
         assert result.exit_code == 0
         assert (workspace / OUTPUT).read_text(encoding="utf-8") == "```bash\necho hi\nhi\n```\n"
 
@@ -537,7 +613,7 @@ class TestVerbose:
 
     def test_the_settings_report_an_explicit_output(self, workspace):
         (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
-        result = run("-v", INPUT, "elsewhere.md")
+        result = run("-E", "-v", INPUT, "elsewhere.md")
         assert result.exit_code == 0
         assert unstamped(result.stderr).startswith(settings(workspace, output="elsewhere.md"))
 

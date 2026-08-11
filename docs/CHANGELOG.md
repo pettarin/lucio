@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `-O` / `--overwrite-files` option, required to overwrite an existing OUTPUT
 - `--color` / `--no-color` option
 - `-G` / `--pager` option, printing the document through a pager when on a terminal
+- Open the rendered document with a comment naming the template it came from,
+  omitted by the `-E` / `--omit-edit-comment` option
 - Log the settings of the run at `DEBUG` level, before the first block is executed:
   the resolved input and output paths, the overwrite flag, and the block timeout
 
