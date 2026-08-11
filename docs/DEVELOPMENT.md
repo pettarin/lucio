@@ -25,7 +25,7 @@ You should be able to run:
 
 ```bash
 (lucio_dev) $ lucio --version
-lucio, version 0.0.2
+lucio, version 0.0.3
 ```
 
 

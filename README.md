@@ -10,7 +10,7 @@ executes the fenced shell or code blocks that opted in,
 and writes a rendered Markdown file:
 
 ```bash
-$ lucio README.template.md README.md
+$ lucio README.template.md
 ```
 
 It is strictly template-to-output, never in-place,
@@ -22,6 +22,14 @@ The typical use case is documentation that must not go stale:
 the template holds the commands, the rendered file holds
 the commands *and* the output they produced when the file was generated.
 
+`lucio` has been developed to render the Markdown files
+forming the CLI usage guide for
+[`volumito`](https://github.com/pettarin/volumito);
+the design strive to achieve flexibility
+while keeping the tool extremely light
+(just a PyPI package with minimal dependencies)
+and the annotations simple for the human user to add.
+
 
 ## Features
 
@@ -30,7 +38,7 @@ the commands *and* the output they produced when the file was generated.
 - Source block, captured stdout, and captured stderr, each shown or hidden per block
 - Output merged into the source fence, as a terminal transcript, or kept in a fence of its own
 - Hidden setup blocks, for the commands that prepare the stage but must not appear
-- File inclusion by way of an ordinary `cat`
+- Raw Markdown file inclusion
 - Expected exit codes, so that a documented failure stays a failure
   and an undocumented one aborts the run
 - Syntax errors surface before any block is executed
@@ -90,16 +98,21 @@ You should be able to run:
 
 ```bash
 (lucio_env) $ lucio --version
-lucio, version 0.0.2
+lucio, version 0.0.3
 ```
 
 
 ## Usage
 
 ```
-Usage: lucio [OPTIONS] INPUT OUTPUT
+Usage: lucio [OPTIONS] INPUT [OUTPUT]
 
   Render the Markdown template INPUT into OUTPUT, executing its lucio blocks.
+
+  Without OUTPUT, an INPUT named NAME.template.md is rendered into NAME.md,
+  and any other INPUT is printed on stdout. An OUTPUT of "-" always means
+  stdout, and the diagnostics of the tool always go to stderr, so the two
+  never mix.
 
   The template is rendered in memory and written out only once everything
   succeeded, so a failing block leaves OUTPUT untouched.
@@ -108,27 +121,55 @@ Options:
   --version              Show the version and exit.
   --timeout FLOAT RANGE  Per-block execution timeout, in seconds.  [default:
                          120.0; x>0]
+  -O, --overwrite-files  Overwrite OUTPUT if it already exists.
   -v, --verbose          Log each executed block and its exit code to stderr.
   -h, --help             Show this message and exit.
 ```
 
-Both arguments are required, and they must resolve to different files.
-The `INPUTFILE.template.md` / `OUTPUTFILE.md` naming convention used throughout
-this documentation is just a convention: `lucio` does not enforce it.
+INPUT is required; OUTPUT is optional, and the two must resolve to different files.
+Where the rendered document ends up depends on the two arguments:
 
-Everything `lucio` has to say goes to stderr; its stdout stays empty.
+| INPUT | OUTPUT | destination |
+|---|---|---|
+| `NAME.template.md` | *(omitted)* | `NAME.md`, next to INPUT |
+| anything else | *(omitted)* | stdout |
+| anything | `-` | stdout |
+| anything | a path | that path |
+
+So the common case needs one argument only:
+
+```bash
+$ lucio README.template.md          # writes README.md
+```
+
+The `.template.md` suffix is the only name `lucio` reads anything into; `OUTPUTFILE.md`
+is a convention of this documentation, not a rule.
+
+An OUTPUT of `-` prints the document instead of writing it, which keeps `lucio` usable
+in a pipeline even for a template-named INPUT:
+
+```bash
+$ lucio README.template.md - | less
+```
+
+Everything `lucio` has to say goes to stderr, the rendered document being the
+only thing ever written to stdout.
+
+An existing OUTPUT is never clobbered by accident, derived names included: `lucio`
+refuses to run unless `-O` / `--overwrite-files` is given. The check happens before
+the template is parsed, so a refusal costs nothing and executes no block.
 
 ### Exit codes
 
 | code | meaning |
 |---|---|
-| `0` | success: OUTPUT was written |
-| `1` | OUTPUT could not be written |
+| `0` | success: OUTPUT was written, or the document was printed on stdout |
+| `1` | OUTPUT could not be written, or it exists and `--overwrite-files` was not given |
 | `2` | usage error (missing or bad arguments, INPUT and OUTPUT are the same file) |
 | `3` | template error: syntax error, or INPUT cannot be read or decoded |
 | `4` | execution error: unexpected exit code, timed-out block, `bash` not runnable |
 
-On any error other than `0`, OUTPUT is never opened:
+On any error other than `0`, OUTPUT is never opened and stdout stays empty:
 a pre-existing OUTPUT is left exactly as it was.
 
 
@@ -275,19 +316,9 @@ cat CONFIGURATION_FILE.md
 
 ## Development
 
-Set up a development environment, install the package in editable mode
-with its development dependencies, and run the whole check suite
-(tests, linter, and type checker):
-
-```bash
-$ make micromamba-create-dev
-$ micromamba activate lucio_dev
-
-(lucio_dev) $ make install-e-this-dev
-(lucio_dev) $ make test
-```
-
-Run `make help` for the list of the available targets.
+See the
+[DEVELOPMENT](https://github.com/pettarin/lucio/blob/main/docs/DEVELOPMENT.md)
+document.
 
 
 ## License

@@ -19,6 +19,9 @@ from lucio.renderer import render_document
 EXIT_EXECUTION_ERROR = 4
 EXIT_TEMPLATE_ERROR = 3
 EXIT_WRITE_ERROR = 1
+OUTPUT_SUFFIX = ".md"
+STDOUT_PATH = "-"
+TEMPLATE_SUFFIX = ".template.md"
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
@@ -31,6 +34,13 @@ EXIT_WRITE_ERROR = 1
     help="Per-block execution timeout, in seconds.",
 )
 @click.option(
+    "-O",
+    "--overwrite-files",
+    is_flag=True,
+    default=False,
+    help="Overwrite OUTPUT if it already exists.",
+)
+@click.option(
     "-v",
     "--verbose",
     is_flag=True,
@@ -40,15 +50,37 @@ EXIT_WRITE_ERROR = 1
 @click.argument(
     "input_file", metavar="INPUT", type=click.Path(exists=True, dir_okay=False, path_type=Path)
 )
-@click.argument("output_file", metavar="OUTPUT", type=click.Path(dir_okay=False, path_type=Path))
-def main(input_file: Path, output_file: Path, timeout: float, verbose: bool) -> None:
+@click.argument(
+    "output_file",
+    metavar="[OUTPUT]",
+    required=False,
+    type=click.Path(allow_dash=True, dir_okay=False, path_type=Path),
+)
+def main(
+    input_file: Path,
+    output_file: Path | None,
+    overwrite_files: bool,
+    timeout: float,
+    verbose: bool,
+) -> None:
     """Render the Markdown template INPUT into OUTPUT, executing its lucio blocks.
+
+    Without OUTPUT, an INPUT named NAME.template.md is rendered into NAME.md, and any
+    other INPUT is printed on stdout. An OUTPUT of "-" always means stdout, and the
+    diagnostics of the tool always go to stderr, so the two never mix.
 
     The template is rendered in memory and written out only once everything succeeded,
     so a failing block leaves OUTPUT untouched.
     """
-    if input_file.resolve() == output_file.resolve():
-        raise click.UsageError("INPUT and OUTPUT must be different files")
+    destination = _resolve_output(input_file, output_file)
+    if destination is not None:
+        if input_file.resolve() == destination.resolve():
+            raise click.UsageError("INPUT and OUTPUT must be different files")
+        if not overwrite_files and destination.exists():
+            _fail(
+                f"{destination}: file exists (use --overwrite-files to overwrite)",
+                EXIT_WRITE_ERROR,
+            )
 
     source = str(input_file)
     text = _read_template(input_file, source)
@@ -69,10 +101,13 @@ def main(input_file: Path, output_file: Path, timeout: float, verbose: bool) -> 
         _fail(str(exc), EXIT_EXECUTION_ERROR)
 
     try:
-        with output_file.open("w", encoding="utf-8", newline="\n") as handle:
-            handle.write(rendered)
+        if destination is None:
+            click.echo(rendered, nl=False)
+        else:
+            with destination.open("w", encoding="utf-8", newline="\n") as handle:
+                handle.write(rendered)
     except OSError as exc:
-        _fail(f"{output_file}: {exc}", EXIT_WRITE_ERROR)
+        _fail(f"{destination or 'stdout'}: {exc}", EXIT_WRITE_ERROR)
 
 
 def _fail(message: str, code: int) -> NoReturn:
@@ -96,6 +131,16 @@ def _read_template(input_file: Path, source: str) -> str:
     except OSError as exc:
         _fail(f"{source}: {exc}", EXIT_TEMPLATE_ERROR)
     return text.replace("\r\n", "\n")
+
+
+def _resolve_output(input_file: Path, output_file: Path | None) -> Path | None:
+    """Return the file to render into, or None to print the document on stdout."""
+    if output_file is not None:
+        return None if str(output_file) == STDOUT_PATH else output_file
+    name = input_file.name
+    if name.endswith(TEMPLATE_SUFFIX):
+        return input_file.with_name(f"{name[: -len(TEMPLATE_SUFFIX)]}{OUTPUT_SUFFIX}")
+    return None
 
 
 if __name__ == "__main__":  # pragma: no cover

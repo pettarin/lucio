@@ -13,7 +13,7 @@ from lucio.errors import (
     TemplateSyntaxError,
 )
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 __author__ = "Alberto Pettarin"
 __email__ = "alberto@albertopettarin.it"
 
