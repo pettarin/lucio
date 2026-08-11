@@ -171,15 +171,21 @@ The messages of the tool go through the standard `logging` machinery, under the
 `lucio` logger, and come out on stderr stamped with the UTC time and their level:
 
 ```
+[2026-08-11T10:14:52.310Z] [DEBU] Input file: "/home/user/lucio/README.template.md"
+[2026-08-11T10:14:52.310Z] [DEBU] Output file: "/home/user/lucio/README.md"
+[2026-08-11T10:14:52.311Z] [DEBU] Overwrite files: True
+[2026-08-11T10:14:52.311Z] [DEBU] Block timeout: 60.0 seconds
 [2026-08-11T10:14:52.318Z] [DEBU] README.template.md:12: executing bash lucio block
 [2026-08-11T10:14:52.402Z] [DEBU] README.template.md:12: exit code 0
 [2026-08-11T10:14:52.404Z] [INFO] Rendered "README.template.md" into "README.md"
 ```
 
 `INFO` and above are shown by default, which is one line per run saying what was
-written; `-v` lowers the bar to `DEBUG` and adds the two lines per executed block
-seen above; failures are reported as `ERRO`. The levels are colored when stderr is
-a terminal, and `--no-color` turns that off everywhere.
+written; failures are reported as `ERRO`. `-v` lowers the bar to `DEBUG`, which opens
+the log with the settings of the run — the resolved paths, whether an existing OUTPUT
+may be overwritten, and the timeout each block is given — and then reports every block
+as it is executed. The levels are colored when stderr is a terminal, and `--no-color`
+turns that off everywhere.
 
 Using `lucio` as a library instead, nothing is printed until you install a handler
 of your own on the `lucio` logger.

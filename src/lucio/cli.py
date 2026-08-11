@@ -97,6 +97,7 @@ def main(
     """
     setup_console(color=color, verbose=verbose)
     destination = _resolve_output(input_file, output_file)
+    _log_settings(input_file, destination, overwrite_files, timeout)
     if destination is not None:
         if input_file.resolve() == destination.resolve():
             raise click.UsageError("INPUT and OUTPUT must be different files")
@@ -141,6 +142,19 @@ def _fail(message: str, code: int) -> NoReturn:
     """Report ``message`` on stderr and terminate with the given exit code."""
     error(message)
     raise SystemExit(code)
+
+
+def _log_settings(
+    input_file: Path, destination: Path | None, overwrite_files: bool, timeout: float | None
+) -> None:
+    """Log the settings of the run, one per line, before anything is read or executed."""
+    debug(f'Input file: "{input_file.resolve()}"')
+    if destination is None:
+        debug("Output file: standard output")
+    else:
+        debug(f'Output file: "{destination.resolve()}"')
+    debug(f"Overwrite files: {overwrite_files}")
+    debug("Block timeout: none" if timeout is None else f"Block timeout: {timeout} seconds")
 
 
 def _read_template(input_file: Path, source: str) -> str:

@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Print the rendered document on stdout when OUTPUT is omitted, or when it is `-`
 - `-O` / `--overwrite-files` option, required to overwrite an existing OUTPUT
 - `--color` / `--no-color` option
+- Log the settings of the run at `DEBUG` level, before the first block is executed:
+  the resolved input and output paths, the overwrite flag, and the block timeout
 
 ### Changed
 

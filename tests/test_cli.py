@@ -27,6 +27,17 @@ def unstamped(text):
     return _STAMP.sub("", text)
 
 
+def settings(workspace, output=OUTPUT, overwrite=False, timeout="60.0 seconds"):
+    """Return the four settings lines that -v prints before anything is executed."""
+    destination = "standard output" if output is None else f'"{(workspace / output).resolve()}"'
+    return (
+        f'[DEBU] Input file: "{(workspace / INPUT).resolve()}"\n'
+        f"[DEBU] Output file: {destination}\n"
+        f"[DEBU] Overwrite files: {overwrite}\n"
+        f"[DEBU] Block timeout: {timeout}\n"
+    )
+
+
 @pytest.fixture
 def workspace(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
@@ -252,9 +263,10 @@ class TestStandardOutput:
         assert result.exit_code == 0
         assert result.stdout == "```bash\necho hi\nhi\n```\n"
         assert unstamped(result.stderr) == (
-            f"[DEBU] {INPUT}:1: executing bash lucio block\n"
-            f"[DEBU] {INPUT}:1: exit code 0\n"
-            f'[INFO] Rendered "{INPUT}" on the standard output\n'
+            settings(workspace, output=None)
+            + f"[DEBU] {INPUT}:1: executing bash lucio block\n"
+            + f"[DEBU] {INPUT}:1: exit code 0\n"
+            + f'[INFO] Rendered "{INPUT}" on the standard output\n'
         )
 
     def test_nothing_is_printed_when_a_block_fails(self, workspace):
@@ -408,17 +420,53 @@ class TestVerbose:
         result, _ = render(workspace, template, "-v")
         assert result.exit_code == 0
         assert unstamped(result.stderr) == (
-            f"[DEBU] {INPUT}:3: executing bash lucio block\n"
-            f"[DEBU] {INPUT}:3: exit code 0\n"
-            f"[DEBU] {INPUT}:7: executing bash include block\n"
-            f"[DEBU] {INPUT}:7: exit code 0\n"
-            f'[INFO] Rendered "{INPUT}" into "{OUTPUT}"\n'
+            settings(workspace)
+            + f"[DEBU] {INPUT}:3: executing bash lucio block\n"
+            + f"[DEBU] {INPUT}:3: exit code 0\n"
+            + f"[DEBU] {INPUT}:7: executing bash include block\n"
+            + f"[DEBU] {INPUT}:7: exit code 0\n"
+            + f'[INFO] Rendered "{INPUT}" into "{OUTPUT}"\n'
         )
 
     def test_exit_code_is_reported(self, workspace):
         result, _ = render(workspace, "```bash lucio exit=any\nexit 3\n```\n", "--verbose")
         assert result.exit_code == 0
         assert f"[DEBU] {INPUT}:1: exit code 3\n" in unstamped(result.stderr)
+
+    def test_the_settings_open_the_log(self, workspace):
+        result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v")
+        assert result.exit_code == 0
+        assert unstamped(result.stderr).startswith(settings(workspace))
+
+    def test_the_settings_report_an_explicit_output(self, workspace):
+        (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
+        result = run("-v", INPUT, "elsewhere.md")
+        assert result.exit_code == 0
+        assert unstamped(result.stderr).startswith(settings(workspace, output="elsewhere.md"))
+
+    def test_the_settings_report_the_overwrite_flag(self, workspace):
+        result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v", "-O")
+        assert result.exit_code == 0
+        assert "[DEBU] Overwrite files: True\n" in unstamped(result.stderr)
+
+    def test_the_settings_report_a_disabled_timeout(self, workspace):
+        result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v", "--timeout", "-1")
+        assert result.exit_code == 0
+        assert "[DEBU] Block timeout: none\n" in unstamped(result.stderr)
+
+    def test_the_settings_report_a_custom_timeout(self, workspace):
+        result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v", "--timeout", "0.5")
+        assert result.exit_code == 0
+        assert "[DEBU] Block timeout: 0.5 seconds\n" in unstamped(result.stderr)
+
+    def test_the_settings_precede_a_refusal_to_overwrite(self, workspace):
+        (workspace / OUTPUT).write_text("previous content\n", encoding="utf-8")
+        result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v")
+        assert result.exit_code == 1
+        assert unstamped(result.stderr) == (
+            settings(workspace)
+            + f"[ERRO] {OUTPUT}: file exists (use --overwrite-files to overwrite)\n"
+        )
 
     def test_only_the_summary_shows_by_default(self, workspace):
         result, _ = render(workspace, "```bash lucio\necho hi\n```\n")
