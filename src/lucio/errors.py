@@ -48,6 +48,15 @@ class ExitCodeMismatchError(ExecutionError):
         self.stderr = stderr
 
 
+class IncludeError(ExecutionError):
+    """A file an include names could not be read."""
+
+    def __init__(self, path: str, line: int, included: str, reason: str) -> None:
+        super().__init__(path, line, f'cannot include "{included}": {reason}')
+        self.included = included
+        self.reason = reason
+
+
 class TemplateSyntaxError(TemplateError):
     """A template violates the lucio fence or attribute grammar."""
 

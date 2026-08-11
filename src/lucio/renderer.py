@@ -7,7 +7,7 @@
 import re
 from collections.abc import Callable
 
-from lucio.model import BlockKind, BlockSegment, ExecutionResult, Segment, VerbatimSegment
+from lucio.model import BlockSegment, Command, ExecutionResult, Segment, VerbatimSegment
 
 MIN_FENCE_LENGTH = 3
 
@@ -28,7 +28,7 @@ def normalize_stream(text: str) -> str:
 
 def render_block(block: BlockSegment, result: ExecutionResult) -> str:
     """Render one block: one merged fence, a source fence, an output fence, or nothing."""
-    if block.kind is BlockKind.INCLUDE:
+    if block.options.command is Command.INCLUDE:
         return normalize_stream(result.stdout)
 
     options = block.options

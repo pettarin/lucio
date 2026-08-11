@@ -9,21 +9,25 @@ from pathlib import Path
 
 import pytest
 
-from lucio.errors import ExecutionError, ExecutionTimeoutError, ExitCodeMismatchError
-from lucio.executor import execute_block
-from lucio.model import BlockKind, BlockOptions, BlockSegment
+from lucio.errors import (
+    ExecutionError,
+    ExecutionTimeoutError,
+    ExitCodeMismatchError,
+    IncludeError,
+)
+from lucio.executor import execute_block, include_file
+from lucio.model import BlockOptions, BlockSegment
 
 SOURCE = "doc.template.md"
 
 
-def make_block(body, expected_exit=0, line=1, kind=BlockKind.EXECUTE):
+def make_block(body, expected_exit=0, line=1):
     return BlockSegment(
         body=body,
         close_line="```\n",
         fence_char="`",
         fence_length=3,
         indent="",
-        kind=kind,
         line=line,
         options=BlockOptions(expected_exit=expected_exit),
     )
@@ -56,9 +60,6 @@ class TestCapture:
     def test_invalid_utf8_is_replaced(self):
         assert run("printf '\\xff'\n").stdout == "\ufffd"
 
-    def test_include_block_is_executed_like_any_other(self):
-        block = make_block("echo hi\n", kind=BlockKind.INCLUDE)
-        assert execute_block(block, SOURCE, 10.0).stdout == "hi\n"
 
 
 class TestProcess:
@@ -154,3 +155,39 @@ class TestFailures:
         )
         with pytest.raises(ExecutionTimeoutError):
             execute_block(make_block("sleep 5\n"), SOURCE, 1.5)
+
+
+class TestIncludeFile:
+    def test_it_reads_the_file(self, tmp_path):
+        (tmp_path / "PART.md").write_text("## Part\n\nText.\n", encoding="utf-8")
+        result = include_file(tmp_path / "PART.md", SOURCE, 1)
+        assert (result.exit_code, result.stderr) == (0, "")
+        assert result.stdout == "## Part\n\nText.\n"
+
+    def test_crlf_is_normalized(self, tmp_path):
+        (tmp_path / "PART.md").write_bytes(b"one\r\ntwo\r\n")
+        assert include_file(tmp_path / "PART.md", SOURCE, 1).stdout == "one\ntwo\n"
+
+    def test_an_empty_file_reads_as_nothing(self, tmp_path):
+        (tmp_path / "PART.md").touch()
+        assert include_file(tmp_path / "PART.md", SOURCE, 1).stdout == ""
+
+    def test_a_missing_file_raises(self, tmp_path):
+        with pytest.raises(IncludeError) as excinfo:
+            include_file(tmp_path / "NOPE.md", SOURCE, 4)
+        assert excinfo.value.line == 4
+        assert "cannot include" in str(excinfo.value)
+        assert "No such file" in str(excinfo.value)
+
+    def test_a_directory_raises(self, tmp_path):
+        with pytest.raises(IncludeError, match="cannot include"):
+            include_file(tmp_path, SOURCE, 1)
+
+    def test_undecodable_bytes_raise(self, tmp_path):
+        (tmp_path / "PART.md").write_bytes(b"\xff\xfe not utf-8\n")
+        with pytest.raises(IncludeError, match="not valid UTF-8"):
+            include_file(tmp_path / "PART.md", SOURCE, 1)
+
+    def test_it_is_an_execution_error(self, tmp_path):
+        with pytest.raises(ExecutionError):
+            include_file(tmp_path / "NOPE.md", SOURCE, 1)

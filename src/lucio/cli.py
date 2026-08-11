@@ -14,8 +14,8 @@ import click
 from lucio import __version__
 from lucio.console import debug, error, info, setup_console
 from lucio.errors import ExecutionError, ExecutionTimeoutError, TemplateError, TotalTimeoutError
-from lucio.executor import execute_block
-from lucio.model import BlockSegment, ExecutionResult
+from lucio.executor import execute_block, include_file
+from lucio.model import BlockSegment, Command, ExecutionResult
 from lucio.parser import parse_template
 from lucio.renderer import render_document
 
@@ -153,7 +153,13 @@ def main(
     text = _read_template(input_file, source)
 
     def runner(block: BlockSegment) -> ExecutionResult:
-        debug(f"{source}:{block.line}: executing bash {block.kind.value} block")
+        if block.options.command is Command.INCLUDE:
+            # A relative path is the template's, not the working directory's
+            included = input_file.parent / (block.options.path or Path())
+            debug(f'{source}:{block.line}: including "{included}"')
+            return include_file(included, source, block.line)
+
+        debug(f"{source}:{block.line}: executing bash block")
         allowed = _remaining_timeout(block_timeout, deadline, source, block.line, total_timeout)
         try:
             result = execute_block(block, source, allowed)

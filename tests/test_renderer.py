@@ -6,7 +6,7 @@
 
 import pytest
 
-from lucio.model import BlockKind, BlockOptions, BlockSegment, ExecutionResult, VerbatimSegment
+from lucio.model import BlockOptions, BlockSegment, Command, ExecutionResult, VerbatimSegment
 from lucio.renderer import fence_for, normalize_stream, render_block, render_document
 
 
@@ -15,7 +15,6 @@ def make_block(
     close_line="```\n",
     fence_length=3,
     indent="",
-    kind=BlockKind.EXECUTE,
     line=1,
     **options,
 ):
@@ -25,7 +24,6 @@ def make_block(
         fence_char="`",
         fence_length=fence_length,
         indent=indent,
-        kind=kind,
         line=line,
         options=BlockOptions(**options),
     )
@@ -235,20 +233,20 @@ class TestRenderBlockMerged:
 
 class TestRenderBlockInclude:
     def test_stdout_is_pasted_raw(self):
-        block = make_block(body="cat FILE.md\n", kind=BlockKind.INCLUDE)
+        block = make_block(body="", command=Command.INCLUDE)
         rendered = render_block(block, make_result(stdout="# Title\n\nSome text.\n"))
         assert rendered == "# Title\n\nSome text.\n"
 
     def test_stdout_is_normalized(self):
-        block = make_block(kind=BlockKind.INCLUDE)
+        block = make_block(command=Command.INCLUDE)
         assert render_block(block, make_result(stdout="text\n\n\n")) == "text\n"
 
     def test_empty_stdout_renders_nothing(self):
-        block = make_block(kind=BlockKind.INCLUDE)
+        block = make_block(command=Command.INCLUDE)
         assert render_block(block, make_result(stdout="\n")) == ""
 
     def test_source_and_stderr_are_ignored(self):
-        block = make_block(kind=BlockKind.INCLUDE)
+        block = make_block(command=Command.INCLUDE)
         assert render_block(block, make_result(stdout="text\n", stderr="warning\n")) == "text\n"
 
 
@@ -360,7 +358,7 @@ class TestRenderDocument:
     def test_include_output_is_pasted_between_verbatim_segments(self):
         segments = [
             VerbatimSegment(text="before\n\n"),
-            make_block(kind=BlockKind.INCLUDE),
+            make_block(command=Command.INCLUDE),
             VerbatimSegment(text="\nafter\n"),
         ]
         rendered = render_document(segments, constant_runner(make_result(stdout="# Included\n")))
@@ -369,7 +367,7 @@ class TestRenderDocument:
     def test_empty_include_collapses_like_a_hidden_block(self):
         segments = [
             VerbatimSegment(text="before\n\n"),
-            make_block(kind=BlockKind.INCLUDE),
+            make_block(command=Command.INCLUDE),
             VerbatimSegment(text="\nafter\n"),
         ]
         assert render_document(segments, constant_runner()) == "before\n\nafter\n"

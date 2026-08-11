@@ -10,6 +10,7 @@ from lucio.errors import (
     ExecutionError,
     ExecutionTimeoutError,
     ExitCodeMismatchError,
+    IncludeError,
     LucioError,
     TemplateError,
     TemplateSyntaxError,
@@ -24,6 +25,7 @@ class TestHierarchy:
             (ExecutionError, LucioError),
             (ExecutionTimeoutError, ExecutionError),
             (ExitCodeMismatchError, ExecutionError),
+            (IncludeError, ExecutionError),
             (TemplateError, LucioError),
             (TemplateSyntaxError, TemplateError),
             (TotalTimeoutError, ExecutionError),
@@ -75,6 +77,18 @@ class TestExecutionTimeoutError:
 
     def test_timeout_is_kept(self):
         assert ExecutionTimeoutError("doc.template.md", 7, 0.5).timeout == 0.5
+
+
+class TestIncludeError:
+    def test_message_names_the_file_and_the_reason(self):
+        error = IncludeError("doc.template.md", 9, "docs/PART.md", "No such file or directory")
+        assert str(error) == (
+            'doc.template.md:9: cannot include "docs/PART.md": No such file or directory'
+        )
+
+    def test_details_are_kept(self):
+        error = IncludeError("doc.template.md", 9, "docs/PART.md", "boom")
+        assert (error.included, error.reason) == ("docs/PART.md", "boom")
 
 
 class TestTotalTimeoutError:

@@ -6,12 +6,13 @@
 
 import enum
 from dataclasses import dataclass
+from pathlib import Path
 
 
-class BlockKind(enum.Enum):
-    """The kind of trigger fence a block was opened with."""
+class Command(enum.Enum):
+    """What a block asks lucio to do, as spelled by its ``command`` attribute."""
 
-    EXECUTE = "lucio"
+    EXECUTE = "execute"
     INCLUDE = "include"
 
 
@@ -19,11 +20,13 @@ class BlockKind(enum.Enum):
 class BlockOptions:
     """The attributes of a trigger fence, resolved against their defaults."""
 
-    command: str = "execute"
+    command: Command = Command.EXECUTE
     expected_exit: int | None = 0
     """The exit code the block must exit with; None means "any exit code is fine"."""
     merge: bool = True
     """Whether the captured output belongs inside the source fence, rather than after it."""
+    path: Path | None = None
+    """The file an include reads, as written in the template; None for any other command."""
     show_source: bool = True
     stderr: bool = True
     stdout: bool = True
@@ -42,7 +45,6 @@ class BlockSegment:
     """The length of the opening backtick run, at least 3."""
     indent: str
     """The 0 to 3 spaces preceding the opening fence."""
-    kind: BlockKind
     line: int
     """The 1-based line number of the opening fence in the template."""
     options: BlockOptions

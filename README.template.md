@@ -40,7 +40,7 @@ and the annotations simple for the human user to add.
 - Source block, captured stdout, and captured stderr, each shown or hidden per block
 - Output merged into the source fence, as a terminal transcript, or kept in a fence of its own
 - Hidden setup blocks, for the commands that prepare the stage but must not appear
-- Raw Markdown file inclusion
+- Raw Markdown file inclusion, by path, relative to the template
 - Expected exit codes, so that a documented failure stays a failure
   and an undocumented one aborts the run
 - Syntax errors surface before any block is executed
@@ -215,25 +215,24 @@ a pre-existing OUTPUT is left exactly as it was.
 
 ## Template syntax
 
-Two fences, and only these two, are processed:
+One fence, and only this one, is processed:
 
 ````
 ```bash lucio [key=value ...]
 ```
 ````
 
-````
-```bash include
-```
-````
-
-The trigger word must be the second token of the info string,
+The trigger word `lucio` must be the second token of the info string,
 and the language must be `bash`.
 Anything else is ordinary Markdown:
 ```` ```bash ````, ```` ```bash lucioX ````, ```` ```bash run lucio ````,
-```` ```lucio ````, and `<!-- include FILE.md -->` all pass through untouched,
-as does any trigger fence written inside a longer fence
-(that is how the examples in this file survive).
+```` ```lucio ````, ```` ```bash include ````, and `<!-- include FILE.md -->`
+all pass through untouched, as does any trigger fence written inside a longer
+fence (that is how the examples in this file survive).
+
+What the block does is chosen by its `command` attribute: `execute`, the
+default, runs the body through bash, and `include` pastes a file named by
+`path`.
 
 ### `bash lucio`
 
@@ -280,9 +279,10 @@ streams are empty no output is emitted at all.
 
 | key | values | default | meaning |
 |---|---|---|---|
-| `command` | `execute` | `execute` | what to do with the block; the only value in this version |
+| `command` | `execute`, `include` | `execute` | what the block does |
 | `exit` | `any`, or an integer between `0` and `255` | `0` | the exit code the block must exit with |
 | `merge` | `True`, `False` | `True` | put the captured output inside the source fence, rather than in a fence of its own |
+| `path` | a file name | *(none)* | the file `command=include` reads |
 | `show_source` | `True`, `False` | `True` | emit the source block, as a plain ```` ```bash ```` fence |
 | `stderr` | `True`, `False` | `True` | include the captured stderr in the output |
 | `stdout` | `True`, `False` | `True` | include the captured stdout in the output |
@@ -292,6 +292,13 @@ Booleans are spelled the Python way, `True` and `False`, and the case matters:
 `true`, `TRUE`, `1`, and `"True"` are all errors, not silent falsehoods.
 An unknown key, a repeated key, a malformed token, or an unknown value
 is an error too.
+
+Each command takes only the attributes it uses: `path` belongs to
+`command=include` and is required by it, while `exit`, `merge`, `show_source`,
+`stderr` and `stdout` belong to `command=execute`. Writing one where it has no
+meaning is an error rather than a silent no-op. A file name with a space in it
+cannot be written, since attributes are separated by whitespace and there is no
+quoting.
 
 `merge` has nothing to do when there is no source fence to merge into
 (`show_source=False`) or no output to merge (empty streams, or both
@@ -334,18 +341,26 @@ unnoticed one:
 [2026-08-11T10:14:53.118Z] [DEBU] README.template.md:24: exit code 3 (permitted by exit=any)
 ```
 
-### `bash include`
+### `command=include`
 
-The body is executed like any other block, but its stdout is pasted raw,
-as Markdown, in place of the block: no source fence, no output fence.
-Its stderr is discarded, and it must exit with `0`.
-Attributes are not allowed.
+The file named by `path` is pasted raw, as Markdown, in place of the block:
+no source fence, no output fence, and no bash involved. The block takes no
+body, and neither timeout applies, there being no process to bound.
 
 ````
-```bash include
-cat CONFIGURATION_FILE.md
+```bash lucio command=include path=CONFIGURATION_FILE.md
 ```
 ````
+
+A relative `path` is resolved against **the directory of the template**, so a
+template and the files it includes travel together and can be rendered from
+anywhere. Note that this differs from the bash blocks, which run in the working
+directory `lucio` was invoked from: in a template stored in `docs/`,
+`path=PART.md` means `docs/PART.md`, while a block's `cat PART.md` does not.
+
+The file is pasted as it is: a trigger fence inside it is text, not something
+`lucio` renders in turn. A file that cannot be read aborts the run, like any
+other failing block.
 
 
 ## Newlines and whitespace

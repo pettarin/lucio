@@ -4,10 +4,12 @@
 :license: GNU General Public License v3.0 (see the LICENSE file for details)
 """
 
+from pathlib import Path
+
 import pytest
 
 from lucio.errors import TemplateSyntaxError
-from lucio.model import BlockKind, BlockOptions, BlockSegment, VerbatimSegment
+from lucio.model import BlockOptions, BlockSegment, Command, VerbatimSegment
 from lucio.parser import parse_template
 
 SOURCE = "doc.template.md"
@@ -55,6 +57,9 @@ class TestVerbatim:
             "````\n```bash lucio\necho hi\n```\n````\n",
             "~~~\n```bash lucio\necho hi\n```\n~~~\n",
             "`````markdown\n```bash include\ncat FILE.md\n```\n`````\n",
+            "```bash include\ncat FILE.md\n```\n",
+            "~~~bash include\ncat FILE.md\n~~~\n",
+            "```text include\ncat FILE.md\n```\n",
         ],
     )
     def test_passthrough_is_one_verbatim_segment(self, text):
@@ -75,22 +80,20 @@ class TestTrigger:
             fence_char="`",
             fence_length=3,
             indent="",
-            kind=BlockKind.EXECUTE,
             line=1,
             options=BlockOptions(),
         )
 
-    def test_include_uses_the_defaults(self):
-        block = only_block("```bash include\ncat FILE.md\n```\n")
-        assert block.kind is BlockKind.INCLUDE
-        assert block.options == BlockOptions()
-        assert block.body == "cat FILE.md\n"
+    def test_include_reads_a_path(self):
+        block = only_block("```bash lucio command=include path=PART.md\n```\n")
+        assert block.options == BlockOptions(command=Command.INCLUDE, path=Path("PART.md"))
+        assert block.body == ""
 
     @pytest.mark.parametrize(
         ("info", "expected"),
         [
             ("bash lucio", BlockOptions()),
-            ("bash lucio command=execute", BlockOptions(command="execute")),
+            ("bash lucio command=execute", BlockOptions(command=Command.EXECUTE)),
             ("bash lucio merge=False", BlockOptions(merge=False)),
             ("bash lucio merge=True", BlockOptions(merge=True)),
             ("bash lucio show_source=False", BlockOptions(show_source=False)),
@@ -135,6 +138,14 @@ class TestTrigger:
         assert only_block(f"```{info}\necho hi\n```\n").options == expected
 
     @pytest.mark.parametrize(
+        "written",
+        ["PART.md", "docs/PART.md", "/abs/PART.md", "../up/PART.md", "with.dots.PART.md"],
+    )
+    def test_the_path_is_kept_as_written(self, written):
+        block = only_block(f"```bash lucio command=include path={written}\n```\n")
+        assert block.options == BlockOptions(command=Command.INCLUDE, path=Path(written))
+
+    @pytest.mark.parametrize(
         "info",
         [
             "bash lucio",
@@ -147,7 +158,7 @@ class TestTrigger:
     )
     def test_info_string_whitespace_is_tolerated(self, info):
         block = only_block(f"```{info}\necho hi\n```\n")
-        assert block.kind is BlockKind.EXECUTE
+        assert block.options.command is Command.EXECUTE
 
     @pytest.mark.parametrize("indent", ["", " ", "  ", "   "])
     def test_indent_is_captured(self, indent):
@@ -195,8 +206,7 @@ class TestTrigger:
             "\n"
             "Middle text.\n"
             "\n"
-            "```bash include\n"
-            "cat FILE.md\n"
+            "```bash lucio command=include path=PART.md\n"
             "```\n"
             "\n"
             "The end.\n"
@@ -210,9 +220,9 @@ class TestTrigger:
             VerbatimSegment,
         ]
         assert segments[0].text == "# Title\n\n"
-        assert segments[1].kind is BlockKind.EXECUTE
+        assert segments[1].options.command is Command.EXECUTE
         assert segments[2].text == "\nMiddle text.\n\n"
-        assert segments[3].kind is BlockKind.INCLUDE
+        assert segments[3].options.command is Command.INCLUDE
         assert segments[3].line == 9
         assert segments[4].text == "\nThe end.\n"
 
@@ -232,12 +242,8 @@ class TestSyntaxErrors:
         ("text", "fragment", "line"),
         [
             ("~~~bash lucio\necho hi\n~~~\n", "must use backticks", 1),
-            ("~~~bash include\ncat FILE.md\n~~~\n", "must use backticks", 1),
             ("~~~~bash lucio\necho hi\n~~~~\n", "must use backticks", 1),
             ("```python lucio\necho hi\n```\n", "requires language 'bash'", 1),
-            ("```text include\ncat FILE.md\n```\n", "requires language 'bash'", 1),
-            ("```bash include stdout=False\ncat FILE.md\n```\n", "takes no attributes", 1),
-            ("```bash include extra\ncat FILE.md\n```\n", "takes no attributes", 1),
             ("```bash lucio foo=1\necho hi\n```\n", "unknown attribute 'foo'", 1),
             ("```bash lucio Stdout=True\necho hi\n```\n", "unknown attribute 'Stdout'", 1),
             ("```bash lucio stdout=True stdout=True\necho hi\n```\n", "duplicate attribute", 1),
@@ -255,6 +261,23 @@ class TestSyntaxErrors:
             ("```bash lucio merge=true\necho hi\n```\n", "must be True or False", 1),
             ("```bash lucio merge=1\necho hi\n```\n", "must be True or False", 1),
             ("```bash lucio command=run\necho hi\n```\n", "unknown value 'run'", 1),
+            ("```bash lucio command=include\n```\n", "requires 'path'", 1),
+            (
+                "```bash lucio command=include path=P.md stdout=False\n```\n",
+                "'stdout' does not apply",
+                1,
+            ),
+            (
+                "```bash lucio command=include path=P.md exit=1 merge=False\n```\n",
+                "'exit' does not apply",
+                1,
+            ),
+            ("```bash lucio path=P.md\necho hi\n```\n", "'path' requires", 1),
+            (
+                "```bash lucio command=include path=P.md\necho hi\n```\n",
+                "takes no body",
+                1,
+            ),
             ('```bash lucio command="execute"\necho hi\n```\n', "unknown value", 1),
             ("```bash lucio exit=256\necho hi\n```\n", "integer 0-255", 1),
             ("```bash lucio exit=1000\necho hi\n```\n", "integer 0-255", 1),
@@ -265,7 +288,6 @@ class TestSyntaxErrors:
             ("```bash lucio exit=abc\necho hi\n```\n", "integer 0-255", 1),
             ("```bash lucio exit=Any\necho hi\n```\n", "integer 0-255", 1),
             ("text\n\n```bash lucio\necho hi\n", "unterminated fence", 3),
-            ("text\n\n```bash include\ncat FILE.md\n", "unterminated fence", 3),
             ("text\n```\nplain\n", "unterminated fence", 2),
             ("text\n~~~\nplain\n", "unterminated fence", 2),
             ("````bash lucio\necho hi\n```\n", "unterminated fence", 1),

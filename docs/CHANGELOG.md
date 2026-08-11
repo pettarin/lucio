@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.0.4] - 2026-08-11
+
+### Added
+
+- `command=include` with a `path` attribute, reading the file directly, with a relative
+  path resolved against the directory of the template
+
+### Removed
+
+- The `bash include` trigger, superseded by `command=include`; such a fence is now
+  ordinary Markdown, and its `cat FILE.md` body is no longer needed
+
+
 ## [0.0.3] - 2026-08-11
 
 ### Added

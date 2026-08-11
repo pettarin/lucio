@@ -229,9 +229,11 @@ class TestRendering:
         )
         assert (workspace / "side_effect.txt").exists()
 
-    def test_include_pastes_stdout_raw(self, workspace):
+    def test_include_pastes_the_file_raw(self, workspace):
         (workspace / "OTHER.md").write_text("## Included\n\nSome text.\n", encoding="utf-8")
-        template = "# Title\n\n```bash include\ncat OTHER.md\n```\n\nThe end.\n"
+        template = (
+            "# Title\n\n```bash lucio command=include path=OTHER.md\n```\n\nThe end.\n"
+        )
         result, output = render(workspace, template)
         assert result.exit_code == 0
         assert output.read_text(encoding="utf-8") == (
@@ -311,7 +313,7 @@ class TestStandardOutput:
         assert result.stdout == "```bash\necho hi\nhi\n```\n"
         assert unstamped(result.stderr) == (
             settings(workspace, output=None)
-            + f"[DEBU] {INPUT}:1: executing bash lucio block\n"
+            + f"[DEBU] {INPUT}:1: executing bash block\n"
             + f"[DEBU] {INPUT}:1: exit code 0\n"
             + f'[INFO] Rendered "{INPUT}" on the standard output\n'
         )
@@ -601,18 +603,17 @@ class TestVerbose:
             "echo hi\n"
             "```\n"
             "\n"
-            "```bash include\n"
-            "echo '## Included'\n"
+            "```bash lucio command=include path=OTHER.md\n"
             "```\n"
         )
+        (workspace / "OTHER.md").write_text("## Included\n", encoding="utf-8")
         result, _ = render(workspace, template, "-v")
         assert result.exit_code == 0
         assert unstamped(result.stderr) == (
             settings(workspace)
-            + f"[DEBU] {INPUT}:3: executing bash lucio block\n"
+            + f"[DEBU] {INPUT}:3: executing bash block\n"
             + f"[DEBU] {INPUT}:3: exit code 0\n"
-            + f"[DEBU] {INPUT}:7: executing bash include block\n"
-            + f"[DEBU] {INPUT}:7: exit code 0\n"
+            + '[DEBU] doc.template.md:7: including "OTHER.md"\n'
             + f'[INFO] Rendered "{INPUT}" into "{OUTPUT}"\n'
         )
 
@@ -765,6 +766,61 @@ class TestFailures:
         result = run(INPUT, "missing_directory/doc.md")
         assert result.exit_code == 1
         assert "[ERRO] missing_directory/doc.md" in unstamped(result.stderr)
+
+
+class TestInclude:
+    INCLUDING = "# Guide\n\n```bash lucio command=include path=PART.md\n```\n\nEnd.\n"
+    PART = "## Part\n\nIncluded text.\n"
+    RENDERED = "# Guide\n\n## Part\n\nIncluded text.\n\nEnd.\n"
+
+    def test_the_path_is_relative_to_the_template(self, workspace):
+        (workspace / "docs").mkdir()
+        (workspace / "docs" / INPUT).write_text(self.INCLUDING, encoding="utf-8")
+        (workspace / "docs" / "PART.md").write_text(self.PART, encoding="utf-8")
+        # A sibling of the template, not of the working directory
+        result = run("-E", f"docs/{INPUT}", STDOUT)
+        assert result.exit_code == 0
+        assert result.stdout == self.RENDERED
+
+    def test_a_file_beside_the_working_directory_is_not_found(self, workspace):
+        (workspace / "docs").mkdir()
+        (workspace / "docs" / INPUT).write_text(self.INCLUDING, encoding="utf-8")
+        (workspace / "PART.md").write_text(self.PART, encoding="utf-8")
+        result = run(f"docs/{INPUT}", STDOUT)
+        assert result.exit_code == 4
+        assert "cannot include" in result.stderr
+
+    def test_an_absolute_path_is_taken_as_is(self, workspace):
+        (workspace / "elsewhere").mkdir()
+        (workspace / "elsewhere" / "PART.md").write_text(self.PART, encoding="utf-8")
+        template = (
+            "# Guide\n\n```bash lucio command=include "
+            f"path={workspace / 'elsewhere' / 'PART.md'}\n```\n\nEnd.\n"
+        )
+        (workspace / INPUT).write_text(template, encoding="utf-8")
+        result = run("-E", INPUT, STDOUT)
+        assert result.exit_code == 0
+        assert result.stdout == self.RENDERED
+
+    def test_a_missing_file_exits_four_and_writes_nothing(self, workspace):
+        result, output = render(workspace, self.INCLUDING)
+        assert result.exit_code == 4
+        assert 'cannot include "PART.md"' in result.stderr
+        assert not output.exists()
+
+    def test_the_old_trigger_is_an_ordinary_fence(self, workspace):
+        template = "# Guide\n\n```bash include\ncat PART.md\n```\n"
+        result, output = render(workspace, template)
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == template
+
+    def test_an_included_file_is_not_rendered_in_turn(self, workspace):
+        part = "```bash lucio\necho nope\n```\n"
+        (workspace / "PART.md").write_text(part, encoding="utf-8")
+        result, output = render(workspace, self.INCLUDING)
+        assert result.exit_code == 0
+        # Pasted byte for byte: a trigger fence inside it stays text
+        assert output.read_text(encoding="utf-8") == f"# Guide\n\n{part}\nEnd.\n"
 
 
 class TestTotalTimeout:

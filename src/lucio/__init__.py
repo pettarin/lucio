@@ -10,6 +10,7 @@ from lucio.errors import (
     ExecutionError,
     ExecutionTimeoutError,
     ExitCodeMismatchError,
+    IncludeError,
     LucioError,
     TemplateError,
     TemplateSyntaxError,
@@ -20,7 +21,7 @@ from lucio.errors import (
 # CLI installs its own), the records go nowhere, silently
 logging.getLogger("lucio").addHandler(logging.NullHandler())
 
-__version__ = "0.0.3"
+__version__ = "0.0.4"
 __author__ = "Alberto Pettarin"
 __email__ = "alberto@albertopettarin.it"
 
@@ -28,6 +29,7 @@ __all__ = [
     "ExecutionError",
     "ExecutionTimeoutError",
     "ExitCodeMismatchError",
+    "IncludeError",
     "LucioError",
     "TemplateError",
     "TemplateSyntaxError",

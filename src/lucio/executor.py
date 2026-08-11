@@ -1,12 +1,18 @@
-"""Execution of block bodies through bash, including the expected-exit policy.
+"""Performing the command of a block: bash execution, or reading a file to include.
 
 :copyright: Copyright (C) 2026 Alberto Pettarin
 :license: GNU General Public License v3.0 (see the LICENSE file for details)
 """
 
 import subprocess
+from pathlib import Path
 
-from lucio.errors import ExecutionError, ExecutionTimeoutError, ExitCodeMismatchError
+from lucio.errors import (
+    ExecutionError,
+    ExecutionTimeoutError,
+    ExitCodeMismatchError,
+    IncludeError,
+)
 from lucio.model import BlockSegment, ExecutionResult
 
 
@@ -42,3 +48,19 @@ def execute_block(block: BlockSegment, source: str, timeout: float | None) -> Ex
     return ExecutionResult(
         exit_code=process.returncode, stderr=process.stderr, stdout=process.stdout
     )
+
+
+def include_file(path: Path, source: str, line: int) -> ExecutionResult:
+    """Read the file an include block names, as the content it contributes.
+
+    No subprocess is involved, so there is nothing to time out and no exit code to
+    check; the result carries the file as its stdout for the renderer to paste.
+    """
+    try:
+        with path.open(encoding="utf-8", newline="") as handle:
+            text = handle.read()
+    except UnicodeDecodeError as exc:
+        raise IncludeError(source, line, str(path), f"not valid UTF-8: {exc}") from exc
+    except OSError as exc:
+        raise IncludeError(source, line, str(path), exc.strerror or str(exc)) from exc
+    return ExecutionResult(exit_code=0, stderr="", stdout=text.replace("\r\n", "\n"))

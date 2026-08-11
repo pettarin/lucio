@@ -6,15 +6,19 @@
 
 import enum
 import re
+from pathlib import Path
 
 from lucio.errors import TemplateSyntaxError
-from lucio.model import BlockKind, BlockOptions, BlockSegment, Segment, VerbatimSegment
+from lucio.model import BlockOptions, BlockSegment, Command, Segment, VerbatimSegment
 
-ATTRIBUTE_KEYS = frozenset({"command", "exit", "merge", "show_source", "stderr", "stdout"})
+ATTRIBUTE_KEYS = frozenset(
+    {"command", "exit", "merge", "path", "show_source", "stderr", "stdout"}
+)
 BOOLEAN_VALUES = {"False": False, "True": True}
-COMMAND_VALUES = frozenset({"execute"})
+COMMAND_VALUES = {command.value: command for command in Command}
+EXECUTE_ONLY_KEYS = frozenset({"exit", "merge", "show_source", "stderr", "stdout"})
 LANGUAGE = "bash"
-TRIGGER_KINDS = {"include": BlockKind.INCLUDE, "lucio": BlockKind.EXECUTE}
+TRIGGER = "lucio"
 
 _EXIT_RE = re.compile(r"0|[1-9][0-9]{0,2}")
 _FENCE_OPEN_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
@@ -42,7 +46,6 @@ def parse_template(text: str, source: str) -> list[Segment]:
     fence_char = ""
     fence_length = 0
     indent = ""
-    kind = BlockKind.EXECUTE
     open_line = 0
     options = BlockOptions()
     state = _State.NORMAL
@@ -57,14 +60,18 @@ def parse_template(text: str, source: str) -> list[Segment]:
                 if closes:
                     state = _State.NORMAL
             elif closes:
+                joined = "".join(body)
+                if options.command is Command.INCLUDE and joined:
+                    raise TemplateSyntaxError(
+                        source, open_line, f"'command={Command.INCLUDE.value}' takes no body"
+                    )
                 segments.append(
                     BlockSegment(
-                        body="".join(body),
+                        body=joined,
                         close_line=line if line.endswith("\n") else f"{line}\n",
                         fence_char=fence_char,
                         fence_length=fence_length,
                         indent=indent,
-                        kind=kind,
                         line=open_line,
                         options=options,
                     )
@@ -87,10 +94,9 @@ def parse_template(text: str, source: str) -> list[Segment]:
             verbatim.append(line)
             continue
 
-        opened_kind = _classify_info_string(info, fence[0], source, number)
         close_re = re.compile(rf"( {{0,3}}){re.escape(fence[0])}{{{len(fence)},}}[ \t]*")
         open_line = number
-        if opened_kind is None:
+        if not _classify_info_string(info, fence[0], source, number):
             state = _State.IN_FENCE_VERBATIM
             verbatim.append(line)
             continue
@@ -101,12 +107,7 @@ def parse_template(text: str, source: str) -> list[Segment]:
         fence_char = fence[0]
         fence_length = len(fence)
         indent = match.group(1)
-        kind = opened_kind
-        options = (
-            _parse_attributes(info.split()[2:], source, number)
-            if opened_kind is BlockKind.EXECUTE
-            else BlockOptions()
-        )
+        options = _parse_attributes(info.split()[2:], source, number)
         state = _State.IN_FENCE_TRIGGER
 
     if state is not _State.NORMAL:
@@ -116,33 +117,44 @@ def parse_template(text: str, source: str) -> list[Segment]:
     return segments
 
 
-def _classify_info_string(info: str, fence_char: str, source: str, line: int) -> BlockKind | None:
-    """Return the kind of trigger the info string opens, or None if it is an ordinary fence."""
+def _check_command_pairing(command: Command, seen: set[str], source: str, line: int) -> None:
+    """Reject attributes that the command does not use, and the ones it cannot do without."""
+    include = Command.INCLUDE.value
+    if command is Command.INCLUDE:
+        if "path" not in seen:
+            raise TemplateSyntaxError(source, line, f"'command={include}' requires 'path'")
+        unusable = sorted(seen & EXECUTE_ONLY_KEYS)
+        if unusable:
+            raise TemplateSyntaxError(
+                source, line, f"'{unusable[0]}' does not apply to 'command={include}'"
+            )
+    elif "path" in seen:
+        raise TemplateSyntaxError(source, line, f"'path' requires 'command={include}'")
+
+
+def _classify_info_string(info: str, fence_char: str, source: str, line: int) -> bool:
+    """Return whether the info string opens a trigger fence rather than an ordinary one."""
     tokens = info.split()
-    if len(tokens) < 2:
-        return None
-    language, trigger = tokens[0], tokens[1]
-    if trigger not in TRIGGER_KINDS:
-        return None
+    if len(tokens) < 2 or tokens[1] != TRIGGER:
+        return False
+    language = tokens[0]
     if language != LANGUAGE:
         raise TemplateSyntaxError(
             source,
             line,
-            f"trigger '{trigger}' requires language '{LANGUAGE}', found '{language}'",
+            f"trigger '{TRIGGER}' requires language '{LANGUAGE}', found '{language}'",
         )
     if fence_char != "`":
         raise TemplateSyntaxError(source, line, "trigger fences must use backticks, not tildes")
-    kind = TRIGGER_KINDS[trigger]
-    if kind is BlockKind.INCLUDE and len(tokens) > 2:
-        raise TemplateSyntaxError(source, line, f"'{LANGUAGE} {trigger}' takes no attributes")
-    return kind
+    return True
 
 
 def _parse_attributes(attrs: list[str], source: str, line: int) -> BlockOptions:
     """Resolve the ``key=value`` tokens of a lucio trigger against their defaults."""
-    command = "execute"
+    command = Command.EXECUTE
     expected_exit: int | None = 0
     merge = True
+    path: Path | None = None
     show_source = True
     stderr = True
     stdout = True
@@ -165,11 +177,13 @@ def _parse_attributes(attrs: list[str], source: str, line: int) -> BlockOptions:
                 raise TemplateSyntaxError(
                     source, line, f"unknown value '{value}' for attribute 'command'"
                 )
-            command = value
+            command = COMMAND_VALUES[value]
         elif key == "exit":
             expected_exit = _parse_exit(value, source, line)
         elif key == "merge":
             merge = _parse_boolean(key, value, source, line)
+        elif key == "path":
+            path = Path(value)
         elif key == "show_source":
             show_source = _parse_boolean(key, value, source, line)
         elif key == "stderr":
@@ -177,10 +191,12 @@ def _parse_attributes(attrs: list[str], source: str, line: int) -> BlockOptions:
         else:
             stdout = _parse_boolean(key, value, source, line)
 
+    _check_command_pairing(command, seen, source, line)
     return BlockOptions(
         command=command,
         expected_exit=expected_exit,
         merge=merge,
+        path=path,
         show_source=show_source,
         stderr=stderr,
         stdout=stdout,
