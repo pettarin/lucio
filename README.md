@@ -1,12 +1,12 @@
 # lucio
 
-Render Markdown templates by executing embedded bash blocks.
+Render Markdown templates by executing embedded shell or code blocks.
 
 
 ## Overview
 
 `lucio` reads a GitHub-flavored Markdown template,
-executes the fenced bash blocks that opted in,
+executes the fenced shell or code blocks that opted in,
 and writes a rendered Markdown file:
 
 ```bash
@@ -25,7 +25,7 @@ the commands *and* the output they produced when the file was generated.
 
 ## Features
 
-- One trigger syntax, no template language: fenced bash blocks and nothing else
+- One trigger syntax, no template language: fenced blocks and nothing else
 - Byte-for-byte passthrough of everything that is not a trigger block
 - Source block, captured stdout, and captured stderr, each shown or hidden per block
 - Output merged into the source fence, as a terminal transcript, or kept in a fence of its own
@@ -90,7 +90,7 @@ You should be able to run:
 
 ```bash
 (lucio_env) $ lucio --version
-lucio, version 0.0.1
+lucio, version 0.0.2
 ```
 
 
@@ -99,8 +99,7 @@ lucio, version 0.0.1
 ```
 Usage: lucio [OPTIONS] INPUT OUTPUT
 
-  Render the Markdown template INPUT into OUTPUT, executing its lucio bash
-  blocks.
+  Render the Markdown template INPUT into OUTPUT, executing its lucio blocks.
 
   The template is rendered in memory and written out only once everything
   succeeded, so a failing block leaves OUTPUT untouched.

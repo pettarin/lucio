@@ -42,7 +42,7 @@ EXIT_WRITE_ERROR = 1
 )
 @click.argument("output_file", metavar="OUTPUT", type=click.Path(dir_okay=False, path_type=Path))
 def main(input_file: Path, output_file: Path, timeout: float, verbose: bool) -> None:
-    """Render the Markdown template INPUT into OUTPUT, executing its lucio bash blocks.
+    """Render the Markdown template INPUT into OUTPUT, executing its lucio blocks.
 
     The template is rendered in memory and written out only once everything succeeded,
     so a failing block leaves OUTPUT untouched.

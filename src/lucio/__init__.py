@@ -1,4 +1,4 @@
-"""lucio - Render Markdown templates by executing embedded bash blocks.
+"""lucio - Render Markdown templates by executing embedded shell or code blocks.
 
 :copyright: Copyright (C) 2026 Alberto Pettarin
 :license: GNU General Public License v3.0 (see the LICENSE file for details)
@@ -13,7 +13,7 @@ from lucio.errors import (
     TemplateSyntaxError,
 )
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 __author__ = "Alberto Pettarin"
 __email__ = "alberto@albertopettarin.it"
 
