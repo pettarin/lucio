@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.0.5] - 2026-08-11
+
+### Changed
+
+- Spell the boolean attribute values `true` and `false`, lowercase like every other
+  value; `True` and `False` are now errors, as their lowercase forms used to be
+
+
 ## [0.0.4] - 2026-08-11
 
 ### Added

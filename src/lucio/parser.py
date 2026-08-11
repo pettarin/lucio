@@ -14,7 +14,7 @@ from lucio.model import BlockOptions, BlockSegment, Command, Segment, VerbatimSe
 ATTRIBUTE_KEYS = frozenset(
     {"command", "exit", "merge", "path", "show_source", "stderr", "stdout"}
 )
-BOOLEAN_VALUES = {"False": False, "True": True}
+BOOLEAN_VALUES = {"false": False, "true": True}
 COMMAND_VALUES = {command.value: command for command in Command}
 EXECUTE_ONLY_KEYS = frozenset({"exit", "merge", "show_source", "stderr", "stdout"})
 LANGUAGE = "bash"
@@ -207,7 +207,7 @@ def _parse_boolean(key: str, value: str, source: str, line: int) -> bool:
     """Parse a Python-style boolean attribute value, rejecting any other spelling."""
     if value not in BOOLEAN_VALUES:
         raise TemplateSyntaxError(
-            source, line, f"attribute '{key}' must be True or False, found '{value}'"
+            source, line, f"attribute '{key}' must be true or false, found '{value}'"
         )
     return BOOLEAN_VALUES[value]
 

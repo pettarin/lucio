@@ -269,7 +269,7 @@ while the body and the closing fence are copied byte-for-byte.
 
 By default the captured output is merged into the source fence, right after
 the commands that produced it, the way a terminal transcript reads.
-With `merge=False` it goes into a separate unlabeled fence instead,
+With `merge=false` it goes into a separate unlabeled fence instead,
 one blank line below the source:
 
 ````
@@ -291,15 +291,16 @@ streams are empty no output is emitted at all.
 |---------------|--------------------------------------------|-----------|------------------------------------------------------------------------------------|
 | `command`     | `execute`, `include`                       | `execute` | what the block does                                                                |
 | `exit`        | `any`, or an integer between `0` and `255` | `0`       | the exit code the block must exit with                                             |
-| `merge`       | `True`, `False`                            | `True`    | put the captured output inside the source fence, rather than in a fence of its own |
+| `merge`       | `true`, `false`                            | `true`    | put the captured output inside the source fence, rather than in a fence of its own |
 | `path`        | a file name                                | *(none)*  | the file `command=include` reads                                                   |
-| `show_source` | `True`, `False`                            | `True`    | emit the source block, as a plain ```` ```bash ```` fence                          |
-| `stderr`      | `True`, `False`                            | `True`    | include the captured stderr in the output                                          |
-| `stdout`      | `True`, `False`                            | `True`    | include the captured stdout in the output                                          |
+| `show_source` | `true`, `false`                            | `true`    | emit the source block, as a plain ```` ```bash ```` fence                          |
+| `stderr`      | `true`, `false`                            | `true`    | include the captured stderr in the output                                          |
+| `stdout`      | `true`, `false`                            | `true`    | include the captured stdout in the output                                          |
 
 Attributes are unquoted `key=value` tokens, separated by whitespace.
-Booleans are spelled the Python way, `True` and `False`, and the case matters:
-`true`, `TRUE`, `1`, and `"True"` are all errors, not silent falsehoods.
+Booleans are written `true` and `false`, lowercase like every other value,
+and nothing else will do: `True`, `TRUE`, `1`, and `"true"` are all errors,
+not silent falsehoods.
 An unknown key, a repeated key, a malformed token, or an unknown value
 is an error too.
 
@@ -311,16 +312,16 @@ cannot be written, since attributes are separated by whitespace and there is no
 quoting.
 
 `merge` has nothing to do when there is no source fence to merge into
-(`show_source=False`) or no output to merge (empty streams, or both
-`stdout=False` and `stderr=False`): in those cases it changes nothing.
+(`show_source=false`) or no output to merge (empty streams, or both
+`stdout=false` and `stderr=false`): in those cases it changes nothing.
 
-A block with `show_source=False stdout=False stderr=False` renders to nothing:
+A block with `show_source=false stdout=false stderr=false` renders to nothing:
 it is a hidden setup block. Blank lines around it are collapsed, so it leaves
 no trace in the output. Every block runs in the working directory `lucio`
 was invoked from, so a hidden block can prepare files for the blocks below it:
 
 ````
-```bash lucio show_source=False stdout=False stderr=False
+```bash lucio show_source=false stdout=false stderr=false
 rm -f ./configuration.yaml
 ```
 ````

@@ -164,7 +164,7 @@ class TestRendering:
 
     def test_merge_false_keeps_the_source_and_the_output_apart(self, workspace):
         result, output = render(
-            workspace, "# Title\n\n```bash lucio merge=False\necho hello\n```\n\nDone.\n"
+            workspace, "# Title\n\n```bash lucio merge=false\necho hello\n```\n\nDone.\n"
         )
         assert result.exit_code == 0
         assert output.read_text(encoding="utf-8") == (
@@ -217,7 +217,7 @@ class TestRendering:
         template = (
             "# Title\n"
             "\n"
-            "```bash lucio show_source=False stdout=False stderr=False\n"
+            "```bash lucio show_source=false stdout=false stderr=false\n"
             "echo spam > side_effect.txt\n"
             "```\n"
             "\n"
@@ -254,7 +254,7 @@ class TestRendering:
         assert output.read_text(encoding="utf-8") == "```bash\necho oops >&2\noops\n```\n"
 
     def test_backticks_in_the_output_grow_the_fence(self, workspace):
-        template = "```bash lucio show_source=False\nprintf '```bash\\nx\\n```\\n'\n```\n"
+        template = "```bash lucio show_source=false\nprintf '```bash\\nx\\n```\\n'\n```\n"
         result, output = render(workspace, template)
         assert result.exit_code == 0
         assert output.read_text(encoding="utf-8") == "````\n```bash\nx\n```\n````\n"
@@ -275,7 +275,7 @@ class TestRendering:
 
     def test_rendering_twice_is_idempotent(self, workspace):
         template = (
-            "```bash lucio show_source=False stdout=False stderr=False\n"
+            "```bash lucio show_source=false stdout=false stderr=false\n"
             "rm -f ./generated.txt\n"
             "```\n"
             "\n"
@@ -407,7 +407,7 @@ class TestEditComment:
 
     def test_an_empty_document_stays_an_empty_file(self, workspace):
         (workspace / INPUT).write_text(
-            "```bash lucio show_source=False stdout=False stderr=False\ntrue\n```\n",
+            "```bash lucio show_source=false stdout=false stderr=false\ntrue\n```\n",
             encoding="utf-8",
         )
         assert run(INPUT).exit_code == 0
