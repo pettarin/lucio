@@ -9,6 +9,7 @@
 	coverage \
 	coverage-html \
 	dist \
+	generate-docs \
 	install-e-this \
 	install-e-this-dev \
 	lint \
@@ -42,6 +43,7 @@ help:
 	@echo "  coverage                   - Run tests with coverage report (all formats)"
 	@echo "  coverage-html              - Run tests with coverage report in HTML format"
 	@echo "  dist                       - Create distribution packages (same as build)"
+	@echo "  generate-docs              - Generate README.md from README.template.md"
 	@echo "  install-e-this             - Install package in editable mode"
 	@echo "  install-e-this-dev         - Install package in editable mode with dev dependencies"
 	@echo "  lint                       - Run ruff linter"
@@ -96,6 +98,12 @@ lint:
 
 check-type-hints:
 	mypy src/
+
+# COLUMNS=80 ensures that lucio blocks are rendered at 80 columns
+# even when run from terminals with less columns;
+# click caps it at 80, so a larger value will not take effect
+generate-docs:
+	COLUMNS=80 lucio --overwrite-files README.template.md README.md
 
 clean:
 	rm -rf build/
