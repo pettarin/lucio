@@ -120,12 +120,12 @@ Where the rendered document ends up depends on the two arguments:
 | anything           | `-`         | stdout                   |
 | anything           | a path      | that path                |
 
-So the common case needs one argument only:
+Examples:
 
 ```bash
 lucio README.template.md          # writes README.md
 lucio README.tmd                  # writes README.md
-lucio README.tmd /tmp/OUT.mark    # writes /tmp/OUT.mark
+lucio README.mark /tmp/OUT.mark   # writes /tmp/OUT.mark
 lucio README.tmd -                # writes to stdout
 ```
 
@@ -325,7 +325,7 @@ rm -f ./configuration.yaml
 ```
 ````
 
-### `command=include`
+### `command=execute`
 
 Each block is executed in its own bash subprocess, with the body passed
 verbatim and nothing injected into it, so shell state (variables, `cd`,
@@ -373,6 +373,31 @@ directory `lucio` was invoked from: in a template stored in `docs/`,
 The file is pasted as it is: a trigger fence inside it is text, not something
 `lucio` renders in turn. A file that cannot be read aborts the run, like any
 other failing block.
+
+Including a file that `lucio` generated pastes its do-not-edit comment along
+with it, in the middle of the document and naming the wrong template.
+Option `-R` / `--remove-do-not-edit-comment-on-include` drops that opening comment
+and the blank line below it, from every file included in the run:
+
+````
+```bash lucio command=include path=PART.md
+```
+````
+
+```
+PART.md, itself rendered by lucio:      included with -R:
+
+<!-- This file PART.md has ... -->      ## Part
+
+## Part                                 Text.
+
+Text.
+```
+
+Only the first line is considered, and only when it is a comment `lucio` itself
+would have written: a licence header, a linter directive or another generator's
+banner is left where it is. Note that `-R` is about the file being read, while
+`-E` is about the file being written; a run can use either, both or neither.
 
 
 

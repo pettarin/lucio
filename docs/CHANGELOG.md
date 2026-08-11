@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `command=include` with a `path` attribute, reading the file directly, with a relative
   path resolved against the directory of the template
+- `-R` / `--remove-do-not-edit-comment-on-include` option, stripping the do-not-edit
+  comment, and the blank line below it, from an included file that `lucio` generated
 
 ### Removed
 

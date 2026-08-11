@@ -4,8 +4,10 @@
 :license: GNU General Public License v3.0 (see the LICENSE file for details)
 """
 
+import re
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import NoReturn
 
@@ -19,6 +21,7 @@ from lucio.model import BlockSegment, Command, ExecutionResult
 from lucio.parser import parse_template
 from lucio.renderer import render_document
 
+EDIT_COMMENT_RE = re.compile(r"^<!--.*has been rendered by CLI tool 'lucio'.*-->$")
 EXIT_EXECUTION_ERROR = 4
 EXIT_TEMPLATE_ERROR = 3
 EXIT_WRITE_ERROR = 1
@@ -80,6 +83,13 @@ def _validate_timeout(
     help="Print the data output through a pager (when on a terminal).",
 )
 @click.option(
+    "-R",
+    "--remove-do-not-edit-comment-on-include",
+    is_flag=True,
+    default=False,
+    help="Strip the do-not-edit comment from an included file.",
+)
+@click.option(
     "-t",
     "--total-timeout",
     type=float,
@@ -113,6 +123,7 @@ def main(
     omit_do_not_edit_comment: bool,
     overwrite_files: bool,
     pager: bool,
+    remove_do_not_edit_comment_on_include: bool,
     total_timeout: float | None,
     verbose: bool,
 ) -> None:
@@ -138,6 +149,7 @@ def main(
         omit_do_not_edit_comment,
         overwrite_files,
         pager,
+        remove_do_not_edit_comment_on_include,
         total_timeout,
     )
     if destination is not None:
@@ -163,7 +175,10 @@ def main(
             # A relative path is the template's, not the working directory's
             included = input_file.parent / (block.options.path or Path())
             debug(f'{source}:{block.line}: including "{included}"')
-            return include_file(included, source, block.line)
+            result = include_file(included, source, block.line)
+            if remove_do_not_edit_comment_on_include:
+                result = replace(result, stdout=_without_edit_comment(result.stdout))
+            return result
 
         debug(f"{source}:{block.line}: executing bash block")
         allowed = _remaining_timeout(block_timeout, deadline, source, block.line, total_timeout)
@@ -229,6 +244,7 @@ def _log_settings(
     omit_do_not_edit_comment: bool,
     overwrite_files: bool,
     pager: bool,
+    remove_do_not_edit_comment_on_include: bool,
     total_timeout: float | None,
 ) -> None:
     """Log the settings of the run, one per line, before anything is read or executed."""
@@ -240,6 +256,7 @@ def _log_settings(
     debug(f"Do-not-edit comment: {not omit_do_not_edit_comment}")
     debug(f"Overwrite files: {overwrite_files}")
     debug(f"Pager: {pager}")
+    debug(f"Remove do-not-edit comment on include: {remove_do_not_edit_comment_on_include}")
     debug(_timeout_setting("Block timeout", block_timeout))
     debug(_timeout_setting("Total timeout", total_timeout))
 
@@ -311,6 +328,18 @@ def _use_pager(pager: bool) -> bool:
     deciding here is what keeps a redirected document byte-identical.
     """
     return pager and sys.stdout.isatty()
+
+
+def _without_edit_comment(text: str) -> str:
+    """Return an included file without the do-not-edit comment lucio would have written.
+
+    Only the first line is considered, and the blank line below it goes too, mirroring
+    the pair `_edit_comment` emits. A comment of anyone else's is left alone.
+    """
+    first, separator, rest = text.partition("\n")
+    if not separator or EDIT_COMMENT_RE.match(first) is None:
+        return text
+    return rest[1:] if rest.startswith("\n") else rest
 
 
 if __name__ == "__main__":  # pragma: no cover
