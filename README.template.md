@@ -96,41 +96,16 @@ $ micromamba activate lucio_env
 
 You should be able to run:
 
-```bash
+```bash lucio
 lucio --version
-lucio, version 0.0.3
 ```
 
 (dropping the `(lucio_env) $` prefix in the examples from now on).
 
 ## Usage
 
-```bash
+```bash lucio
 lucio --help
-Usage: lucio [OPTIONS] INPUT [OUTPUT]
-
-  Render the Markdown template INPUT into OUTPUT, executing its lucio blocks.
-
-  Without OUTPUT, an INPUT named NAME.template.md or NAME.tmd is rendered into
-  NAME.md, and any other INPUT is printed on stdout. An OUTPUT of "-" always
-  means stdout, and the diagnostics of the tool always go to stderr, so the
-  two never mix.
-
-  The template is rendered in memory and written out only once everything
-  succeeded, so a failing block leaves OUTPUT untouched.
-
-Options:
-  --version                 Show the version and exit.
-  --color / --no-color      Color the messages of the tool (when the terminal
-                            supports it).  [default: color]
-  -G, --pager / --no-pager  Print the data output through a pager (when on a
-                            terminal).  [default: no-pager]
-  --timeout FLOAT           Per-block execution timeout, in seconds; -1 for no
-                            timeout.  [default: 60.0]
-  -O, --overwrite-files     Overwrite OUTPUT if it already exists.
-  -v, --verbose             Log each executed block and its exit code to
-                            stderr.
-  -h, --help                Show this message and exit.
 ```
 
 INPUT is required; OUTPUT is optional, and the two must resolve to different files.
