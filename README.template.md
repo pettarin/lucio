@@ -188,8 +188,8 @@ The messages of the tool go through the standard `logging` machinery, under the
 written; failures are reported as `ERRO`. `-v` lowers the bar to `DEBUG`, which opens
 the log with the settings of the run — the resolved paths, whether an existing OUTPUT
 may be overwritten, and the timeout each block is given — and then reports every block
-as it is executed. The levels are colored when stderr is a terminal, and `--no-color`
-turns that off everywhere.
+as it is executed. The levels are colored when stderr is a terminal, and
+`-C` / `--do-not-color` turns that off everywhere.
 
 Using `lucio` as a library instead, nothing is printed until you install a handler
 of your own on the `lucio` logger.

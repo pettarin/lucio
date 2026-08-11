@@ -42,10 +42,11 @@ def _validate_timeout(
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
-    "--color/--no-color",
-    default=True,
-    show_default=True,
-    help="Color the messages of the tool (when the terminal supports it).",
+    "-C",
+    "--do-not-color",
+    is_flag=True,
+    default=False,
+    help="Do not color the messages of the tool.",
 )
 @click.option(
     "-E",
@@ -97,7 +98,7 @@ def _validate_timeout(
 def main(
     input_file: Path,
     output_file: Path | None,
-    color: bool,
+    do_not_color: bool,
     omit_edit_comment: bool,
     overwrite_files: bool,
     pager: bool,
@@ -116,7 +117,7 @@ def main(
     The template is rendered in memory and written out only once everything succeeded,
     so a failing block leaves OUTPUT untouched.
     """
-    setup_console(color=color, verbose=verbose)
+    setup_console(color=not do_not_color, verbose=verbose)
     destination = _resolve_output(input_file, output_file)
     _log_settings(input_file, destination, omit_edit_comment, overwrite_files, pager, timeout)
     if destination is not None:

@@ -77,6 +77,7 @@ class TestOptions:
         # The help is wrapped to the terminal width, so match on the unwrapped text
         unwrapped = " ".join(result.stdout.split())
         assert "INPUT [OUTPUT]" in unwrapped
+        assert "-C, --do-not-color" in unwrapped
         assert "-E, --omit-edit-comment" in unwrapped
         assert "-O, --overwrite-files" in unwrapped
         assert "-P, --pager" in unwrapped
@@ -84,6 +85,19 @@ class TestOptions:
         assert "-1 for no timeout. [default: 60.0]" in unwrapped
         assert "-v, --verbose" in unwrapped
         assert "-V, --version" in unwrapped
+
+    def test_the_console_is_colored_by_default(self, workspace, mocker):
+        console = mocker.patch("lucio.cli.setup_console")
+        (workspace / INPUT).write_text("text\n", encoding="utf-8")
+        assert run(INPUT, STDOUT).exit_code == 0
+        console.assert_called_once_with(color=True, verbose=False)
+
+    @pytest.mark.parametrize("flag", ["-C", "--do-not-color"])
+    def test_the_flag_turns_the_color_off(self, workspace, mocker, flag):
+        console = mocker.patch("lucio.cli.setup_console")
+        (workspace / INPUT).write_text("text\n", encoding="utf-8")
+        assert run(flag, INPUT, STDOUT).exit_code == 0
+        console.assert_called_once_with(color=False, verbose=False)
 
 
 class TestUsageErrors:
@@ -108,8 +122,8 @@ class TestUsageErrors:
         result = run(INPUT, str(workspace / INPUT))
         assert result.exit_code == 2
 
-    @pytest.mark.parametrize("option", ["--no-pager", "-G"])
-    def test_the_removed_pager_spellings(self, workspace, option):
+    @pytest.mark.parametrize("option", ["--no-pager", "-G", "--color", "--no-color"])
+    def test_the_removed_spellings(self, workspace, option):
         (workspace / INPUT).write_text("text\n", encoding="utf-8")
         result = run(option, INPUT, OUTPUT)
         assert result.exit_code == 2
