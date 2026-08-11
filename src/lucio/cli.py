@@ -4,6 +4,7 @@
 :license: GNU General Public License v3.0 (see the LICENSE file for details)
 """
 
+import sys
 from pathlib import Path
 from typing import NoReturn
 
@@ -48,6 +49,13 @@ def _validate_timeout(
     help="Color the messages of the tool (when the terminal supports it).",
 )
 @click.option(
+    "--pager/--no-pager",
+    "-G",
+    default=False,
+    show_default=True,
+    help="Print the data output through a pager (when on a terminal).",
+)
+@click.option(
     "--timeout",
     type=float,
     default=60.0,
@@ -83,6 +91,7 @@ def main(
     output_file: Path | None,
     color: bool,
     overwrite_files: bool,
+    pager: bool,
     timeout: float | None,
     verbose: bool,
 ) -> None:
@@ -97,7 +106,7 @@ def main(
     """
     setup_console(color=color, verbose=verbose)
     destination = _resolve_output(input_file, output_file)
-    _log_settings(input_file, destination, overwrite_files, timeout)
+    _log_settings(input_file, destination, overwrite_files, pager, timeout)
     if destination is not None:
         if input_file.resolve() == destination.resolve():
             raise click.UsageError("INPUT and OUTPUT must be different files")
@@ -126,7 +135,10 @@ def main(
 
     try:
         if destination is None:
-            click.echo(rendered, nl=False)
+            if _use_pager(pager):
+                click.echo_via_pager(rendered)
+            else:
+                click.echo(rendered, nl=False)
         else:
             with destination.open("w", encoding="utf-8", newline="\n") as handle:
                 handle.write(rendered)
@@ -146,7 +158,11 @@ def _fail(message: str, code: int) -> NoReturn:
 
 
 def _log_settings(
-    input_file: Path, destination: Path | None, overwrite_files: bool, timeout: float | None
+    input_file: Path,
+    destination: Path | None,
+    overwrite_files: bool,
+    pager: bool,
+    timeout: float | None,
 ) -> None:
     """Log the settings of the run, one per line, before anything is read or executed."""
     debug(f'Input file: "{input_file.resolve()}"')
@@ -155,6 +171,7 @@ def _log_settings(
     else:
         debug(f'Output file: "{destination.resolve()}"')
     debug(f"Overwrite files: {overwrite_files}")
+    debug(f"Pager: {pager}")
     debug("Block timeout: none" if timeout is None else f"Block timeout: {timeout} seconds")
 
 
@@ -191,6 +208,15 @@ def _resolve_output(input_file: Path, output_file: Path | None) -> Path | None:
         if name.endswith(suffix):
             return input_file.with_name(f"{name[: -len(suffix)]}{OUTPUT_SUFFIX}")
     return None
+
+
+def _use_pager(pager: bool) -> bool:
+    """Return whether the document should go through a pager.
+
+    click pages only on a terminal too, but appends a newline when it does not, so
+    deciding here is what keeps a redirected document byte-identical.
+    """
+    return pager and sys.stdout.isatty()
 
 
 if __name__ == "__main__":  # pragma: no cover

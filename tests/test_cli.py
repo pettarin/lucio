@@ -11,7 +11,7 @@ import pytest
 from click.testing import CliRunner
 
 from lucio import __version__
-from lucio.cli import main
+from lucio.cli import _use_pager, main
 
 INPUT = "doc.template.md"
 OUTPUT = "doc.md"
@@ -27,13 +27,14 @@ def unstamped(text):
     return _STAMP.sub("", text)
 
 
-def settings(workspace, output=OUTPUT, overwrite=False, timeout="60.0 seconds"):
-    """Return the four settings lines that -v prints before anything is executed."""
+def settings(workspace, output=OUTPUT, overwrite=False, pager=False, timeout="60.0 seconds"):
+    """Return the settings lines that -v prints before anything is executed."""
     destination = "standard output" if output is None else f'"{(workspace / output).resolve()}"'
     return (
         f'[DEBU] Input file: "{(workspace / INPUT).resolve()}"\n'
         f"[DEBU] Output file: {destination}\n"
         f"[DEBU] Overwrite files: {overwrite}\n"
+        f"[DEBU] Pager: {pager}\n"
         f"[DEBU] Block timeout: {timeout}\n"
     )
 
@@ -68,6 +69,8 @@ class TestOptions:
         unwrapped = " ".join(result.stdout.split())
         assert "INPUT [OUTPUT]" in unwrapped
         assert "-O, --overwrite-files" in unwrapped
+        assert "-G, --pager / --no-pager" in unwrapped
+        assert "on a terminal). [default: no-pager]" in unwrapped
         assert "-1 for no timeout. [default: 60.0]" in unwrapped
         assert "--verbose" in unwrapped
 
@@ -296,6 +299,56 @@ class TestStandardOutput:
         assert (workspace / STDOUT).read_text(encoding="utf-8") == "not the output\n"
 
 
+class TestPager:
+    def test_the_document_goes_through_the_pager_on_a_terminal(self, workspace, mocker):
+        mocker.patch("lucio.cli._use_pager", return_value=True)
+        paged = mocker.patch("lucio.cli.click.echo_via_pager")
+        (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
+        result = run("--pager", INPUT, STDOUT)
+        assert result.exit_code == 0
+        paged.assert_called_once_with("```bash\necho hi\nhi\n```\n")
+        assert result.stdout == ""
+
+    @pytest.mark.parametrize("flag", ["-G", "--pager"])
+    def test_both_spellings_page(self, workspace, mocker, flag):
+        mocker.patch("lucio.cli._use_pager", return_value=True)
+        paged = mocker.patch("lucio.cli.click.echo_via_pager")
+        (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
+        assert run(flag, INPUT, STDOUT).exit_code == 0
+        paged.assert_called_once()
+
+    def test_a_redirected_document_is_never_paged(self, workspace, mocker):
+        paged = mocker.patch("lucio.cli.click.echo_via_pager")
+        (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
+        result = run("--pager", INPUT, STDOUT)
+        assert result.exit_code == 0
+        paged.assert_not_called()
+        assert result.stdout == "```bash\necho hi\nhi\n```\n"
+
+    def test_a_file_destination_is_never_paged(self, workspace, mocker):
+        mocker.patch("lucio.cli._use_pager", return_value=True)
+        paged = mocker.patch("lucio.cli.click.echo_via_pager")
+        result, output = render(workspace, "```bash lucio\necho hi\n```\n")
+        assert result.exit_code == 0
+        paged.assert_not_called()
+        assert output.read_text(encoding="utf-8") == "```bash\necho hi\nhi\n```\n"
+
+    def test_the_default_does_not_page(self, workspace, mocker):
+        mocker.patch("lucio.cli.sys.stdout.isatty", return_value=True)
+        paged = mocker.patch("lucio.cli.click.echo_via_pager")
+        (workspace / INPUT).write_text("```bash lucio\necho hi\n```\n", encoding="utf-8")
+        assert run(INPUT, STDOUT).exit_code == 0
+        paged.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("pager", "terminal", "expected"),
+        [(True, True, True), (True, False, False), (False, True, False), (False, False, False)],
+    )
+    def test_the_pager_needs_both_the_flag_and_a_terminal(self, mocker, pager, terminal, expected):
+        mocker.patch("lucio.cli.sys.stdout").isatty.return_value = terminal
+        assert _use_pager(pager) is expected
+
+
 class TestDerivedOutput:
     @pytest.mark.parametrize("name", ["doc.template.md", "doc.tmd"])
     def test_template_input_renders_into_its_md_sibling(self, workspace, name):
@@ -487,6 +540,11 @@ class TestVerbose:
         result = run("-v", INPUT, "elsewhere.md")
         assert result.exit_code == 0
         assert unstamped(result.stderr).startswith(settings(workspace, output="elsewhere.md"))
+
+    def test_the_settings_report_the_pager_flag(self, workspace):
+        result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v", "-G")
+        assert result.exit_code == 0
+        assert "[DEBU] Pager: True\n" in unstamped(result.stderr)
 
     def test_the_settings_report_the_overwrite_flag(self, workspace):
         result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v", "-O")
