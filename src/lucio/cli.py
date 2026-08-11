@@ -113,7 +113,8 @@ def main(
     def runner(block: BlockSegment) -> ExecutionResult:
         debug(f"{source}:{block.line}: executing bash {block.kind.value} block")
         result = execute_block(block, source, timeout)
-        debug(f"{source}:{block.line}: exit code {result.exit_code}")
+        permitted = _permitted_by(block, result.exit_code)
+        debug(f"{source}:{block.line}: exit code {result.exit_code}{permitted}")
         return result
 
     try:
@@ -155,6 +156,18 @@ def _log_settings(
         debug(f'Output file: "{destination.resolve()}"')
     debug(f"Overwrite files: {overwrite_files}")
     debug("Block timeout: none" if timeout is None else f"Block timeout: {timeout} seconds")
+
+
+def _permitted_by(block: BlockSegment, exit_code: int) -> str:
+    """Return the attribute that permitted a non-zero exit code, as the template spells it.
+
+    A non-zero code only ever reaches the log when it was permitted: the executor aborts
+    the run otherwise.
+    """
+    if exit_code == 0:
+        return ""
+    expected = block.options.expected_exit
+    return f" (permitted by exit={'any' if expected is None else expected})"
 
 
 def _read_template(input_file: Path, source: str) -> str:

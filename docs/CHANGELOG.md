@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Default `--timeout` to 60 seconds, and accept `-1` for no timeout at all
+- Name the attribute that permitted a non-zero exit code in the verbose log,
+  as `exit code 1 (permitted by exit=1)`
 - Log the messages of the tool through the `lucio` logger, as
   `[UTC timestamp] [LEVEL] message` on stderr, colored when the terminal supports it;
   one `INFO` line per run reports what was rendered, and `--verbose` adds the `DEBUG` ones

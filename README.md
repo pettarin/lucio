@@ -316,6 +316,15 @@ cat missing_file.txt
 
 `exit=any` accepts whatever return code the block returns.
 
+A block that exits non-zero and is allowed to says so in the verbose log, naming the
+attribute that let it through, so a tolerated failure is never mistaken for an
+unnoticed one:
+
+```
+[2026-08-11T10:14:52.402Z] [DEBU] README.template.md:12: exit code 1 (permitted by exit=1)
+[2026-08-11T10:14:53.118Z] [DEBU] README.template.md:24: exit code 3 (permitted by exit=any)
+```
+
 ### `bash include`
 
 The body is executed like any other block, but its stdout is pasted raw,

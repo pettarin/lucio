@@ -428,10 +428,30 @@ class TestVerbose:
             + f'[INFO] Rendered "{INPUT}" into "{OUTPUT}"\n'
         )
 
-    def test_exit_code_is_reported(self, workspace):
-        result, _ = render(workspace, "```bash lucio exit=any\nexit 3\n```\n", "--verbose")
+    @pytest.mark.parametrize(
+        ("attributes", "body", "reported"),
+        [
+            ("exit=1", "false", "exit code 1 (permitted by exit=1)"),
+            ("exit=any", "exit 3", "exit code 3 (permitted by exit=any)"),
+            ("exit=255", "exit 255", "exit code 255 (permitted by exit=255)"),
+            ("exit=any", "exit 1", "exit code 1 (permitted by exit=any)"),
+            ("", "echo hi", "exit code 0"),
+            ("exit=0", "echo hi", "exit code 0"),
+            ("exit=any", "echo hi", "exit code 0"),
+        ],
+    )
+    def test_exit_code_is_reported(self, workspace, attributes, body, reported):
+        template = f"```bash lucio {attributes}\n{body}\n```\n"
+        result, _ = render(workspace, template, "--verbose")
         assert result.exit_code == 0
-        assert f"[DEBU] {INPUT}:1: exit code 3\n" in unstamped(result.stderr)
+        assert f"[DEBU] {INPUT}:1: {reported}\n" in unstamped(result.stderr)
+
+    @pytest.mark.parametrize("attributes", ["", "exit=0", "exit=any"])
+    def test_a_zero_exit_code_is_never_annotated(self, workspace, attributes):
+        template = f"```bash lucio {attributes}\necho hi\n```\n"
+        result, _ = render(workspace, template, "--verbose")
+        assert result.exit_code == 0
+        assert "permitted by" not in result.stderr
 
     def test_the_settings_open_the_log(self, workspace):
         result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v")
