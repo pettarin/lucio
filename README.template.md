@@ -176,7 +176,7 @@ The messages of the tool go through the standard `logging` machinery, under the
 ```
 [2026-08-11T10:14:52.310Z] [DEBU] Input file: "/home/user/lucio/README.template.md"
 [2026-08-11T10:14:52.310Z] [DEBU] Output file: "/home/user/lucio/README.md"
-[2026-08-11T10:14:52.310Z] [DEBU] Do-not-edit comment: True
+[2026-08-11T10:14:52.310Z] [DEBU] Omit do-not-edit comment: False
 [2026-08-11T10:14:52.311Z] [DEBU] Overwrite files: True
 [2026-08-11T10:14:52.311Z] [DEBU] Pager: False
 [2026-08-11T10:14:52.311Z] [DEBU] Block timeout: 60.0 seconds

@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Spell the boolean attribute values `true` and `false`, lowercase like every other
   value; `True` and `False` are now errors, as their lowercase forms used to be
+- Report the do-not-edit setting as its option states it, `Omit do-not-edit comment: False`,
+  rather than as the negation it used to log
 
 
 ## [0.0.4] - 2026-08-11

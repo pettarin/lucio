@@ -253,7 +253,7 @@ def _log_settings(
         debug("Output file: standard output")
     else:
         debug(f'Output file: "{destination.resolve()}"')
-    debug(f"Do-not-edit comment: {not omit_do_not_edit_comment}")
+    debug(f"Omit do-not-edit comment: {omit_do_not_edit_comment}")
     debug(f"Overwrite files: {overwrite_files}")
     debug(f"Pager: {pager}")
     debug(f"Remove do-not-edit comment on include: {remove_do_not_edit_comment_on_include}")

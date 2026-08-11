@@ -33,18 +33,21 @@ def settings(
     workspace,
     output=OUTPUT,
     block="60.0 seconds",
-    comment=False,
+    omit=True,
     overwrite=False,
     pager=False,
     remove=False,
     total="300.0 seconds",
 ):
-    """Return the settings lines that -v prints before anything is executed."""
+    """Return the settings lines that -v prints before anything is executed.
+
+    The defaults describe a run through render(), which passes -E, hence omit=True.
+    """
     destination = "standard output" if output is None else f'"{(workspace / output).resolve()}"'
     return (
         f'[DEBU] Input file: "{(workspace / INPUT).resolve()}"\n'
         f"[DEBU] Output file: {destination}\n"
-        f"[DEBU] Do-not-edit comment: {comment}\n"
+        f"[DEBU] Omit do-not-edit comment: {omit}\n"
         f"[DEBU] Overwrite files: {overwrite}\n"
         f"[DEBU] Pager: {pager}\n"
         f"[DEBU] Remove do-not-edit comment on include: {remove}\n"
@@ -413,11 +416,12 @@ class TestEditComment:
         assert run(INPUT).exit_code == 0
         assert (workspace / OUTPUT).read_text(encoding="utf-8") == ""
 
-    def test_the_settings_report_the_comment(self, workspace):
+    def test_the_settings_report_the_flag(self, workspace):
         (workspace / INPUT).write_text(self.TEMPLATE, encoding="utf-8")
-        assert "[DEBU] Do-not-edit comment: True\n" in unstamped(run("-v", INPUT).stderr)
+        plain = unstamped(run("-v", INPUT).stderr)
+        assert "[DEBU] Omit do-not-edit comment: False\n" in plain
         omitted = unstamped(run("-v", "-E", "-O", INPUT).stderr)
-        assert "[DEBU] Do-not-edit comment: False\n" in omitted
+        assert "[DEBU] Omit do-not-edit comment: True\n" in omitted
 
 
 class TestPager:
