@@ -27,12 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   into `NAME.md`
 - Print the rendered document on stdout when OUTPUT is omitted, or when it is `-`
 - `-O` / `--overwrite-files` option, required to overwrite an existing OUTPUT
-- `-C` / `--do-not-color` option
+- `-D` / `--do-not-color` option
 - `-P` / `--pager` option, printing the document through a pager when on a terminal
 - `-V` as short form of `--version`
 - `-t` / `--total-timeout` option, bounding the whole run, 300 seconds by default
 - Open the rendered document with a comment naming the template it came from,
-  omitted by the `-E` / `--omit-edit-comment` option
+  omitted by the `-E` / `--omit-do-not-edit-comment` option
 - Log the settings of the run at `DEBUG` level, before the first block is executed:
   the resolved input and output paths, the overwrite flag, and the block timeout
 

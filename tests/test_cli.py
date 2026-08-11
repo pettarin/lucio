@@ -43,7 +43,7 @@ def settings(
     return (
         f'[DEBU] Input file: "{(workspace / INPUT).resolve()}"\n'
         f"[DEBU] Output file: {destination}\n"
-        f"[DEBU] Edit comment: {comment}\n"
+        f"[DEBU] Do-not-edit comment: {comment}\n"
         f"[DEBU] Overwrite files: {overwrite}\n"
         f"[DEBU] Pager: {pager}\n"
         f"[DEBU] Block timeout: {block}\n"
@@ -86,8 +86,8 @@ class TestOptions:
         # The help is wrapped to the terminal width, so match on the unwrapped text
         unwrapped = " ".join(result.stdout.split())
         assert "INPUT [OUTPUT]" in unwrapped
-        assert "-C, --do-not-color" in unwrapped
-        assert "-E, --omit-edit-comment" in unwrapped
+        assert "-D, --do-not-color" in unwrapped
+        assert "-E, --omit-do-not-edit-comment" in unwrapped
         assert "-O, --overwrite-files" in unwrapped
         assert "-P, --pager" in unwrapped
         assert "-b, --block-timeout FLOAT" in unwrapped
@@ -103,7 +103,7 @@ class TestOptions:
         assert run(INPUT, STDOUT).exit_code == 0
         console.assert_called_once_with(color=True, verbose=False)
 
-    @pytest.mark.parametrize("flag", ["-C", "--do-not-color"])
+    @pytest.mark.parametrize("flag", ["-D", "--do-not-color"])
     def test_the_flag_turns_the_color_off(self, workspace, mocker, flag):
         console = mocker.patch("lucio.cli.setup_console")
         (workspace / INPUT).write_text("text\n", encoding="utf-8")
@@ -369,7 +369,7 @@ class TestEditComment:
             f"\n{self.DOCUMENT}"
         )
 
-    @pytest.mark.parametrize("flag", ["-E", "--omit-edit-comment"])
+    @pytest.mark.parametrize("flag", ["-E", "--omit-do-not-edit-comment"])
     def test_the_flag_omits_it(self, workspace, flag):
         (workspace / INPUT).write_text(self.TEMPLATE, encoding="utf-8")
         result = run(flag, INPUT, STDOUT)
@@ -408,8 +408,9 @@ class TestEditComment:
 
     def test_the_settings_report_the_comment(self, workspace):
         (workspace / INPUT).write_text(self.TEMPLATE, encoding="utf-8")
-        assert "[DEBU] Edit comment: True\n" in unstamped(run("-v", INPUT).stderr)
-        assert "[DEBU] Edit comment: False\n" in unstamped(run("-v", "-E", "-O", INPUT).stderr)
+        assert "[DEBU] Do-not-edit comment: True\n" in unstamped(run("-v", INPUT).stderr)
+        omitted = unstamped(run("-v", "-E", "-O", INPUT).stderr)
+        assert "[DEBU] Do-not-edit comment: False\n" in omitted
 
 
 class TestPager:

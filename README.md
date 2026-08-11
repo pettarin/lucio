@@ -126,20 +126,20 @@ Usage: lucio [OPTIONS] INPUT [OUTPUT]
   succeeded, so a failing block leaves OUTPUT untouched.
 
 Options:
-  -b, --block-timeout FLOAT  Timeout for one block, in seconds; -1 for no
-                             timeout.  [default: 60.0]
-  -C, --do-not-color         Do not color the messages of the tool.
-  -E, --omit-edit-comment    Do not open the rendered document with the do-
-                             not-edit comment.
-  -O, --overwrite-files      Overwrite OUTPUT if it already exists.
-  -P, --pager                Print the data output through a pager (when on a
-                             terminal).
-  -t, --total-timeout FLOAT  Timeout for the whole run, in seconds; -1 for no
-                             timeout.  [default: 300.0]
-  -v, --verbose              Log each executed block and its exit code to
-                             stderr.
-  -V, --version              Show the version and exit.
-  -h, --help                 Show this message and exit.
+  -b, --block-timeout FLOAT       Timeout for one block, in seconds; -1 for no
+                                  timeout.  [default: 60.0]
+  -D, --do-not-color              Do not color the messages of the tool.
+  -E, --omit-do-not-edit-comment  Do not open the rendered document with the
+                                  do-not-edit comment.
+  -O, --overwrite-files           Overwrite OUTPUT if it already exists.
+  -P, --pager                     Print the data output through a pager (when
+                                  on a terminal).
+  -t, --total-timeout FLOAT       Timeout for the whole run, in seconds; -1
+                                  for no timeout.  [default: 300.0]
+  -v, --verbose                   Log each executed block and its exit code to
+                                  stderr.
+  -V, --version                   Show the version and exit.
+  -h, --help                      Show this message and exit.
 ```
 
 INPUT is required; OUTPUT is optional, and the two must resolve to different files.
@@ -195,7 +195,7 @@ so that whoever finds the generated file knows what to edit instead:
 
 ```
 
-This behavior can be prevented by issuing option `-E` / `--omit-edit-comment`.
+This behavior can be prevented by issuing option `-E` / `--omit-do-not-edit-comment`.
 
 Two timeouts bound a run: each block is given 60 seconds, and the run as a whole is
 given 300 seconds. Pass `-b` / `--block-timeout` and `-t` / `--total-timeout` to raise or
@@ -209,19 +209,23 @@ The messages of the tool go through the standard `logging` machinery, under the
 ```
 [2026-08-11T10:14:52.310Z] [DEBU] Input file: "/home/user/lucio/README.template.md"
 [2026-08-11T10:14:52.310Z] [DEBU] Output file: "/home/user/lucio/README.md"
+[2026-08-11T10:14:52.310Z] [DEBU] Do-not-edit comment: True
 [2026-08-11T10:14:52.311Z] [DEBU] Overwrite files: True
+[2026-08-11T10:14:52.311Z] [DEBU] Pager: False
 [2026-08-11T10:14:52.311Z] [DEBU] Block timeout: 60.0 seconds
-[2026-08-11T10:14:52.318Z] [DEBU] README.template.md:12: executing bash lucio block
+[2026-08-11T10:14:52.311Z] [DEBU] Total timeout: 300.0 seconds
+[2026-08-11T10:14:52.318Z] [DEBU] README.template.md:12: executing bash block
 [2026-08-11T10:14:52.402Z] [DEBU] README.template.md:12: exit code 0
-[2026-08-11T10:14:52.404Z] [INFO] Rendered "README.template.md" into "README.md"
+[2026-08-11T10:14:52.404Z] [DEBU] README.template.md:24: including "PART.md"
+[2026-08-11T10:14:52.406Z] [INFO] Rendered "README.template.md" into "README.md"
 ```
 
 `INFO` and above are shown by default, which is one line per run saying what was
 written; failures are reported as `ERRO`. `-v` lowers the bar to `DEBUG`, which opens
-the log with the settings of the run --- the resolved paths, whether an existing OUTPUT
-may be overwritten, and the timeout each block is given --- and then reports every block
-as it is executed. The levels are colored when stderr is a terminal, and
-`-C` / `--do-not-color` turns that off everywhere.
+the log with the settings of the run --- the resolved paths and every option that
+shapes what happens --- and then reports every block as it is performed: the command
+run and the code it exited with, or the file included. The levels are colored when
+stderr is a terminal, and `-D` / `--do-not-color` turns that off everywhere.
 
 ### Exit Codes
 
@@ -244,7 +248,7 @@ a pre-existing OUTPUT is left exactly as it was.
   a stream holding nothing but newlines counts as empty.
 - The output file ends with exactly one newline.
 - The do-not-edit comment and the blank line below it are the only bytes `lucio`
-  adds of its own; issuing `-E/--omit-edit-comment` removes them.
+  adds of its own; issuing `-E/--omit-do-not-edit-comment` removes them.
 - Everything else, whitespace included, is copied byte-for-byte.
 - A fence is emitted with as many backticks as needed to wrap the captured
   output, even if it contains fences of its own. A merged fence grows only

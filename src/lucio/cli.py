@@ -52,7 +52,7 @@ def _validate_timeout(
     help="Timeout for one block, in seconds; -1 for no timeout.",
 )
 @click.option(
-    "-C",
+    "-D",
     "--do-not-color",
     is_flag=True,
     default=False,
@@ -60,7 +60,7 @@ def _validate_timeout(
 )
 @click.option(
     "-E",
-    "--omit-edit-comment",
+    "--omit-do-not-edit-comment",
     is_flag=True,
     default=False,
     help="Do not open the rendered document with the do-not-edit comment.",
@@ -110,7 +110,7 @@ def main(
     output_file: Path | None,
     block_timeout: float | None,
     do_not_color: bool,
-    omit_edit_comment: bool,
+    omit_do_not_edit_comment: bool,
     overwrite_files: bool,
     pager: bool,
     total_timeout: float | None,
@@ -135,7 +135,7 @@ def main(
         input_file,
         destination,
         block_timeout,
-        omit_edit_comment,
+        omit_do_not_edit_comment,
         overwrite_files,
         pager,
         total_timeout,
@@ -179,7 +179,7 @@ def main(
     except ExecutionError as exc:
         _fail(str(exc), EXIT_EXECUTION_ERROR)
 
-    if rendered and not omit_edit_comment:
+    if rendered and not omit_do_not_edit_comment:
         rendered = f"{_edit_comment(input_file, destination)}{rendered}"
 
     try:
@@ -223,7 +223,7 @@ def _log_settings(
     input_file: Path,
     destination: Path | None,
     block_timeout: float | None,
-    omit_edit_comment: bool,
+    omit_do_not_edit_comment: bool,
     overwrite_files: bool,
     pager: bool,
     total_timeout: float | None,
@@ -234,7 +234,7 @@ def _log_settings(
         debug("Output file: standard output")
     else:
         debug(f'Output file: "{destination.resolve()}"')
-    debug(f"Edit comment: {not omit_edit_comment}")
+    debug(f"Do-not-edit comment: {not omit_do_not_edit_comment}")
     debug(f"Overwrite files: {overwrite_files}")
     debug(f"Pager: {pager}")
     debug(_timeout_setting("Block timeout", block_timeout))
