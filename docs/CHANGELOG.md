@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Accept a double-quoted attribute values, as in `path="/path/with spaces/FILE.md"`
+- Expand a leading `~` and any `$VARIABLE` or `${VARIABLE}` in the `path` of an include;
+  an unset variable aborts the run
 
 
 ## [0.0.5] - 2026-08-11

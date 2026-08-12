@@ -857,6 +857,74 @@ class TestInclude:
         assert result.exit_code == 0
         assert result.stdout == self.RENDERED
 
+    def test_a_leading_tilde_is_the_home_directory(self, workspace, monkeypatch):
+        home = workspace / "home"
+        home.mkdir()
+        (home / "PART.md").write_text(self.PART, encoding="utf-8")
+        monkeypatch.setenv("HOME", str(home))
+        (workspace / INPUT).write_text(
+            "# Guide\n\n```bash lucio command=include path=~/PART.md\n```\n\nEnd.\n",
+            encoding="utf-8",
+        )
+        result = run("-E", INPUT, STDOUT)
+        assert result.exit_code == 0
+        assert result.stdout == self.RENDERED
+
+    @pytest.mark.parametrize("written", ["$PARTS/PART.md", "${PARTS}/PART.md"])
+    def test_a_variable_is_expanded(self, workspace, monkeypatch, written):
+        parts = workspace / "parts"
+        parts.mkdir()
+        (parts / "PART.md").write_text(self.PART, encoding="utf-8")
+        monkeypatch.setenv("PARTS", str(parts))
+        (workspace / INPUT).write_text(
+            f"# Guide\n\n```bash lucio command=include path={written}\n```\n\nEnd.\n",
+            encoding="utf-8",
+        )
+        result = run("-E", INPUT, STDOUT)
+        assert result.exit_code == 0
+        assert result.stdout == self.RENDERED
+
+    def test_a_quoted_value_expands_too(self, workspace, monkeypatch):
+        parts = workspace / "parts" / "with spaces"
+        parts.mkdir(parents=True)
+        (parts / "PART.md").write_text(self.PART, encoding="utf-8")
+        monkeypatch.setenv("PARTS", str(workspace / "parts"))
+        (workspace / INPUT).write_text(
+            '# Guide\n\n```bash lucio command=include path="$PARTS/with spaces/PART.md"\n'
+            "```\n\nEnd.\n",
+            encoding="utf-8",
+        )
+        result = run("-E", INPUT, STDOUT)
+        assert result.exit_code == 0
+        assert result.stdout == self.RENDERED
+
+    def test_an_unset_variable_exits_four(self, workspace, monkeypatch):
+        monkeypatch.delenv("NOPE", raising=False)
+        template = "```bash lucio command=include path=$NOPE/PART.md\n```\n"
+        result, output = render(workspace, template)
+        assert result.exit_code == 4
+        assert "environment variable 'NOPE' is not set" in result.stderr
+        assert '"$NOPE/PART.md"' in result.stderr
+        assert not output.exists()
+
+    @pytest.mark.parametrize("written", ["price$.md", "${BAD-NAME}.md"])
+    def test_what_is_not_a_reference_stays_literal(self, workspace, written):
+        template = f"```bash lucio command=include path={written}\n```\n"
+        result, _ = render(workspace, template)
+        assert result.exit_code == 4
+        # Read as written, so it fails on the file rather than on a variable
+        assert "No such file" in result.stderr
+
+    def test_the_verbose_line_shows_the_expanded_path(self, workspace, monkeypatch):
+        parts = workspace / "parts"
+        parts.mkdir()
+        (parts / "PART.md").write_text(self.PART, encoding="utf-8")
+        monkeypatch.setenv("PARTS", str(parts))
+        template = "```bash lucio command=include path=$PARTS/PART.md\n```\n"
+        result, _ = render(workspace, template, "-v")
+        assert result.exit_code == 0
+        assert f'including "{parts / "PART.md"}"' in result.stderr
+
     def test_a_missing_file_exits_four_and_writes_nothing(self, workspace):
         result, output = render(workspace, self.INCLUDING)
         assert result.exit_code == 4

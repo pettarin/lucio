@@ -164,6 +164,12 @@ class TestTrigger:
         block = only_block(f'```bash lucio command=include path="{written}"\n```\n')
         assert block.options == BlockOptions(command=Command.INCLUDE, path=Path(written))
 
+    @pytest.mark.parametrize("written", ["~/PART.md", "$PARTS/PART.md", "${PARTS}/PART.md"])
+    def test_the_path_is_not_expanded_here(self, written):
+        # Expanding is the CLI's business; the model records what the template says
+        block = only_block(f"```bash lucio command=include path={written}\n```\n")
+        assert block.options.path == Path(written)
+
     def test_a_single_quote_is_an_ordinary_character(self):
         # It does not quote, so the token still ends at the space and the rest is junk
         with pytest.raises(TemplateSyntaxError, match="malformed attribute token 'b.md''"):

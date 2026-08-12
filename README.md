@@ -427,6 +427,11 @@ so a template and the files it includes travel together and can be rendered from
 Note that this differs from the Bash blocks, which run in the working
 directory `lucio` was invoked from.
 
+An absolute `path` is taken as it is. A leading `~` and any `$VARIABLE` or
+`${VARIABLE}` are expanded first, so a template can name a file outside its own tree
+without hard-coding a machine; naming a variable that is not set aborts the run,
+rather than silently reading from the wrong place.
+
 The file is pasted as it is: a trigger fence inside it is text,
 not something `lucio` renders in turn.
 A file that cannot be read aborts the run, like any other failing block.
