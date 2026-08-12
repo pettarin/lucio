@@ -94,6 +94,11 @@ class TestTrigger:
         [
             ("bash lucio", BlockOptions()),
             ("bash lucio command=execute", BlockOptions(command=Command.EXECUTE)),
+            ('bash lucio command="execute"', BlockOptions(command=Command.EXECUTE)),
+            ('bash lucio stdout="true"', BlockOptions(stdout=True)),
+            ('bash lucio stdout="false"', BlockOptions(stdout=False)),
+            ('bash lucio exit="1"', BlockOptions(expected_exit=1)),
+            ('bash lucio exit="any"', BlockOptions(expected_exit=None)),
             ("bash lucio merge=false", BlockOptions(merge=False)),
             ("bash lucio merge=true", BlockOptions(merge=True)),
             ("bash lucio show_source=false", BlockOptions(show_source=False)),
@@ -144,6 +149,29 @@ class TestTrigger:
     def test_the_path_is_kept_as_written(self, written):
         block = only_block(f"```bash lucio command=include path={written}\n```\n")
         assert block.options == BlockOptions(command=Command.INCLUDE, path=Path(written))
+
+    @pytest.mark.parametrize(
+        "written",
+        [
+            "/path/with spaces/FILE.md",
+            "with spaces.md",
+            "it's here.md",
+            "  leading and trailing  ",
+            "PART.md",
+        ],
+    )
+    def test_a_quoted_path_keeps_what_is_inside_the_quotes(self, written):
+        block = only_block(f'```bash lucio command=include path="{written}"\n```\n')
+        assert block.options == BlockOptions(command=Command.INCLUDE, path=Path(written))
+
+    def test_a_single_quote_is_an_ordinary_character(self):
+        # It does not quote, so the token still ends at the space and the rest is junk
+        with pytest.raises(TemplateSyntaxError, match="malformed attribute token 'b.md''"):
+            parse("```bash lucio command=include path='a b.md'\n```\n")
+
+    def test_a_quoted_value_may_hold_the_separator_of_another(self):
+        block = only_block('```bash lucio command=include path="a=b c.md"\n```\n')
+        assert block.options.path == Path("a=b c.md")
 
     @pytest.mark.parametrize(
         "info",
@@ -252,11 +280,15 @@ class TestSyntaxErrors:
             ("```bash lucio stdout\necho hi\n```\n", "malformed attribute token 'stdout'", 1),
             ("```bash lucio stdout=\necho hi\n```\n", "malformed attribute token 'stdout='", 1),
             ("```bash lucio =x\necho hi\n```\n", "malformed attribute token '=x'", 1),
+            ('```bash lucio path="a b\necho hi\n```\n', "unterminated quote", 1),
+            ('```bash lucio command=include path=""\n```\n', "empty value", 1),
+            ('```bash lucio command=include path="a"b\n```\n', "stray quote", 1),
+            ('```bash lucio command=include path=a"b"\n```\n', "stray quote", 1),
+            ('```bash lucio stdout="yes"\necho hi\n```\n', "must be true or false", 1),
             ("```bash lucio stdout=True\necho hi\n```\n", "must be true or false", 1),
             ("```bash lucio stdout=False\necho hi\n```\n", "must be true or false", 1),
             ("```bash lucio stdout=TRUE\necho hi\n```\n", "must be true or false", 1),
             ("```bash lucio stdout=1\necho hi\n```\n", "must be true or false", 1),
-            ('```bash lucio stdout="true"\necho hi\n```\n', "must be true or false", 1),
             ("```bash lucio show_source=FALSE\necho hi\n```\n", "must be true or false", 1),
             ("```bash lucio stderr=yes\necho hi\n```\n", "must be true or false", 1),
             ("```bash lucio merge=True\necho hi\n```\n", "must be true or false", 1),
@@ -279,7 +311,6 @@ class TestSyntaxErrors:
                 "takes no body",
                 1,
             ),
-            ('```bash lucio command="execute"\necho hi\n```\n', "unknown value", 1),
             ("```bash lucio exit=256\necho hi\n```\n", "integer 0-255", 1),
             ("```bash lucio exit=1000\necho hi\n```\n", "integer 0-255", 1),
             ("```bash lucio exit=-1\necho hi\n```\n", "integer 0-255", 1),

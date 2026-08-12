@@ -21,7 +21,7 @@ from lucio.errors import (
 # CLI installs its own), the records go nowhere, silently
 logging.getLogger("lucio").addHandler(logging.NullHandler())
 
-__version__ = "0.0.5"
+__version__ = "0.0.6"
 __author__ = "Alberto Pettarin"
 __email__ = "alberto@albertopettarin.it"
 

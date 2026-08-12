@@ -18,6 +18,7 @@ BOOLEAN_VALUES = {"false": False, "true": True}
 COMMAND_VALUES = {command.value: command for command in Command}
 EXECUTE_ONLY_KEYS = frozenset({"exit", "merge", "show_source", "stderr", "stdout"})
 LANGUAGE = "bash"
+QUOTE = '"'
 TRIGGER = "lucio"
 
 _EXIT_RE = re.compile(r"0|[1-9][0-9]{0,2}")
@@ -107,7 +108,7 @@ def parse_template(text: str, source: str) -> list[Segment]:
         fence_char = fence[0]
         fence_length = len(fence)
         indent = match.group(1)
-        options = _parse_attributes(info.split()[2:], source, number)
+        options = _parse_attributes(_split_info(info, source, number)[2:], source, number)
         state = _State.IN_FENCE_TRIGGER
 
     if state is not _State.NORMAL:
@@ -134,7 +135,7 @@ def _check_command_pairing(command: Command, seen: set[str], source: str, line: 
 
 def _classify_info_string(info: str, fence_char: str, source: str, line: int) -> bool:
     """Return whether the info string opens a trigger fence rather than an ordinary one."""
-    tokens = info.split()
+    tokens = _split_info(info, source, line)
     if len(tokens) < 2 or tokens[1] != TRIGGER:
         return False
     language = tokens[0]
@@ -171,6 +172,7 @@ def _parse_attributes(attrs: list[str], source: str, line: int) -> BlockOptions:
         if key in seen:
             raise TemplateSyntaxError(source, line, f"duplicate attribute '{key}'")
         seen.add(key)
+        value = _unquote(value, token, source, line)
 
         if key == "command":
             if value not in COMMAND_VALUES:
@@ -225,6 +227,32 @@ def _parse_exit(value: str, source: str, line: int) -> int | None:
     return int(value)
 
 
+def _split_info(info: str, source: str, line: int) -> list[str]:
+    """Split an info string on whitespace, keeping a double-quoted run in one token.
+
+    The quotes are left in the token, so the ``key=value`` split is unaffected and the
+    value can be unquoted where it is validated.
+    """
+    tokens: list[str] = []
+    current: list[str] = []
+    quoted = False
+    for char in info:
+        if char == QUOTE:
+            quoted = not quoted
+            current.append(char)
+        elif char.isspace() and not quoted:
+            if current:
+                tokens.append("".join(current))
+                current = []
+        else:
+            current.append(char)
+    if quoted:
+        raise TemplateSyntaxError(source, line, "unterminated quote in the info string")
+    if current:
+        tokens.append("".join(current))
+    return tokens
+
+
 def _split_lines(text: str) -> list[str]:
     """Split on "\\n" only, keeping the newline; a lone "\\r" is never a line break."""
     parts = text.split("\n")
@@ -232,3 +260,19 @@ def _split_lines(text: str) -> list[str]:
     if parts[-1]:
         lines.append(parts[-1])
     return lines
+
+
+def _unquote(value: str, token: str, source: str, line: int) -> str:
+    """Return a value with its wrapping quotes removed, rejecting a stray one.
+
+    Quoting is lexical: what comes out is validated exactly as an unquoted value is,
+    so ``stdout="true"`` and ``stdout=true`` mean the same thing.
+    """
+    if value.startswith(QUOTE) and value.endswith(QUOTE) and len(value) > 1:
+        unquoted = value[1:-1]
+        if not unquoted:
+            raise TemplateSyntaxError(source, line, f"empty value in attribute token '{token}'")
+        return unquoted
+    if QUOTE in value:
+        raise TemplateSyntaxError(source, line, f"stray quote in attribute token '{token}'")
+    return value

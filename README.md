@@ -106,7 +106,7 @@ You should be able to run:
 
 ```bash
 lucio --version
-lucio, version 0.0.5
+lucio, version 0.0.6
 ```
 
 (dropping the `(lucio_env) $` prefix in the examples from now on).
@@ -345,9 +345,12 @@ to interleave the stdout/stderr contents.
 | `stderr`      | `true`, `false`             | `true`    | `execute`  | include the captured stderr in the output                                          |
 | `stdout`      | `true`, `false`             | `true`    | `execute`  | include the captured stdout in the output                                          |
 
-Attributes are unquoted `key=value` tokens, separated by whitespace.
+Attributes are `key=value` tokens, separated by whitespace.
+A value may be wrapped in double quotes, and must be if it contains spaces,
+as in `path="/path/with spaces/FILE.md"`; the quotes come off before the value
+is checked, so `stdout="true"` means exactly `stdout=true`.
 Booleans are written `true` and `false`, lowercase like every other value;
-attempting to use for instance `True`, `TRUE`, `1`, or `"true"` will produce an error.
+attempting to use for instance `True`, `TRUE`, or `1` will produce an error.
 Specifying unknown keys, keys not supported by the given `command`,
 repeating a key, mispelled tokens or values will error out as well.
 

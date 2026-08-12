@@ -846,6 +846,17 @@ class TestInclude:
         assert result.exit_code == 0
         assert result.stdout == self.RENDERED
 
+    def test_a_quoted_path_may_contain_spaces(self, workspace):
+        (workspace / "with spaces").mkdir()
+        (workspace / "with spaces" / "PART.md").write_text(self.PART, encoding="utf-8")
+        (workspace / INPUT).write_text(
+            '# Guide\n\n```bash lucio command=include path="with spaces/PART.md"\n```\n\nEnd.\n',
+            encoding="utf-8",
+        )
+        result = run("-E", INPUT, STDOUT)
+        assert result.exit_code == 0
+        assert result.stdout == self.RENDERED
+
     def test_a_missing_file_exits_four_and_writes_nothing(self, workspace):
         result, output = render(workspace, self.INCLUDING)
         assert result.exit_code == 4
