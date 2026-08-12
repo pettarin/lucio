@@ -275,6 +275,14 @@ With `merge=false` it goes into a separate unlabeled fence instead,
 one blank line below the source:
 
 ````
+```bash lucio merge=false
+echo "hello"
+```
+````
+
+renders as two fenced blocks:
+
+````
 ```bash
 echo "hello"
 ```
@@ -286,6 +294,8 @@ hello
 
 Either way, stdout comes first and stderr after it,
 and if the selected streams are empty no output is emitted at all.
+You can use stream redirection (e.g., `2>&1`) in the source block
+to interleave the stdout/stderr contents.
 
 #### Attributes
 
