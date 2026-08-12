@@ -59,7 +59,7 @@ for the human user to manually author and maintain.
 
 - Python 3.13 or later
 - A package/virtual environment manager tool (e.g., `micromamba`, `conda`, `uv`, etc.)
-- `bash`, available on `PATH`
+- To execute shell blocks: `bash`/`sh`/`zsh` available on `PATH`
 
 
 ## Installation
@@ -302,8 +302,8 @@ The body of the block is executed by Bash, and the block is replaced by
 its source fence and/or what the body printed:
 
 ````
-```bash lucio
-echo "hello"
+```bash lucio command=execute
+echo "Hello World"
 ```
 ````
 
@@ -311,8 +311,8 @@ renders as:
 
 ````
 ```bash
-echo "hello"
-hello
+echo "Hello World"
+Hello World
 ```
 ````
 
@@ -325,8 +325,8 @@ With `merge=false` it goes into a separate unlabeled fence instead,
 one blank line below the source:
 
 ````
-```bash lucio merge=false
-echo "hello"
+```bash lucio command=execute merge=false
+echo "Hello World"
 ```
 ````
 
@@ -334,11 +334,11 @@ renders as two fenced blocks:
 
 ````
 ```bash
-echo "hello"
+echo "Hello World"
 ```
 
 ```
-hello
+Hello World
 ```
 ````
 
@@ -351,7 +351,7 @@ to interleave the stdout/stderr contents.
 
 | Key           | Values                           | Default    | Applies To | Meaning                                                                            |
 |---------------|----------------------------------|------------|------------|------------------------------------------------------------------------------------|
-| `command`     | `execute`, `include`             | `execute`  |            | what the block does                                                                |
+| `command`     | `execute`, `include`             | `include`  |            | what the block does                                                                |
 | `exit`        | `any`, or int in `[0, 255]`      | `0`        | `execute`  | the exit code the block must exit with (if not, `lucio` run fails)                 |
 | `merge`       | `true`, `false`                  | `true`     | `execute`  | put the captured output inside the source fence, rather than in a fence of its own |
 | `path`        | a file path                      | N/A        | `include`  | the file `command=include` reads                                                   |
@@ -381,54 +381,20 @@ Every block runs in the working directory `lucio` was invoked from,
 so a hidden block can prepare files for the blocks below it:
 
 ````
-```bash lucio show_source=false stdout=false stderr=false
+```bash lucio command=execute show_source=false stdout=false stderr=false
 rm -f ./configuration.yaml
 echo "answer: 42" > ./myotherfile.yaml
 ```
 ````
 
 As anticipated above, there are two types of trigger blocks,
-depending on the `command` attribute: `command=execute` blocks (default),
-and `command=include` blocks, described in the next subsections.
-
-#### Blocks With `command=execute`
-
-````
-```bash lucio [command=execute] [exit=0] [show_source=true] [stdout=true] [stderr=true] [merge=true]
-# write any Bash command(s) to be executed as the block body
-echo "Hello World!"
-touch /tmp/myfile
-```
-````
-
-Each block is executed in its own Bash subprocess,
-with the body passed verbatim and nothing injected into it,
-so shell state (variables, `cd`, functions) does not carry over from one block to the next;
-the filesystem, of course, does.
-
-If a block exits with a code other than the expected one, the whole run is aborted
-and OUTPUT is not written.
-Expected failures must declared with `exit` to prevent that:
-
-````
-```bash lucio exit=1
-cat missing_file.txt
-```
-````
-
-Specify `exit=any` to accept whatever return code the block returns.
-
-The verbose log will show something similar to the following:
-
-```
-[2026-08-11T10:14:52.402Z] [DEBU] README.template.md:12: exit code 1 (permitted by exit=1)
-[2026-08-11T10:14:53.118Z] [DEBU] README.template.md:24: exit code 3 (permitted by exit=any)
-```
+depending on the `command` attribute: `command=include` blocks (default),
+and `command=execute` blocks, described in the next subsections.
 
 #### Blocks With `command=include`
 
 ````
-```LANGUAGE lucio command=include path=CONFIGURATION_FILE.md [style=language]
+```LANGUAGE lucio [command=include] path=/path/to/file/to/be/included [style=language]
 ```
 ````
 
@@ -509,6 +475,44 @@ banners, etc. are left unchanged.
 Note that `-R` is about the file being read,
 while `-E` is about the file being written;
 a run of `lucio` can use either, both or neither.
+
+
+#### Blocks With `command=execute`
+
+**IMPORTANT**: currently only `LANGUAGE=bash` blocks support `command=execute`.
+
+````
+```bash lucio [command=execute] [exit=0] [show_source=true] [stdout=true] [stderr=true] [merge=true]
+# write any Bash command(s) to be executed as the block body
+echo "Hello World"
+touch /tmp/myfile
+```
+````
+
+Each block is executed in its own Bash subprocess,
+with the body passed verbatim and nothing injected into it,
+so shell state (variables, `cd`, functions) does not carry over from one block to the next;
+the filesystem, of course, does.
+
+If a block exits with a code other than the expected one, the whole run is aborted
+and OUTPUT is not written.
+Expected failures must declared with `exit` to prevent that:
+
+````
+```bash lucio exit=1
+cat missing_file.txt
+```
+````
+
+Specify `exit=any` to accept whatever return code the block returns.
+
+The verbose log will show something similar to the following:
+
+```
+[2026-08-11T10:14:52.402Z] [DEBU] README.template.md:12: exit code 1 (permitted by exit=1)
+[2026-08-11T10:14:53.118Z] [DEBU] README.template.md:24: exit code 3 (permitted by exit=any)
+```
+
 
 
 ## Development
