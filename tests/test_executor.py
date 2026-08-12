@@ -1,9 +1,10 @@
-"""Tests for the bash executor, exercised against a real bash.
+"""Tests for the shell executor, exercised against real shells.
 
 :copyright: Copyright (C) 2026 Alberto Pettarin
 :license: GNU General Public License v3.0 (see the LICENSE file for details)
 """
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -17,25 +18,36 @@ from lucio.errors import (
 )
 from lucio.executor import execute_block, include_file
 from lucio.model import BlockOptions, BlockSegment, Command
+from lucio.parser import SHELLS
 
 SOURCE = "doc.template.md"
 
 
-def make_block(body, expected_exit=0, line=1):
+def installed(shell, *rest):
+    """Turn a row into one parameter, skipped where its shell is not on PATH."""
+    return pytest.param(
+        shell,
+        *rest,
+        marks=pytest.mark.skipif(shutil.which(shell) is None, reason=f"no {shell} on PATH"),
+    )
+
+
+def make_block(body, expected_exit=0, language="bash", line=1):
     return BlockSegment(
         body=body,
         close_line="```\n",
         fence_char="`",
         fence_length=3,
         indent="",
-        language="bash",
+        language=language,
         line=line,
         options=BlockOptions(command=Command.EXECUTE, expected_exit=expected_exit),
     )
 
 
-def run(body, expected_exit=0, timeout=10.0):
-    return execute_block(make_block(body, expected_exit=expected_exit), SOURCE, timeout)
+def run(body, expected_exit=0, language="bash", timeout=10.0):
+    block = make_block(body, expected_exit=expected_exit, language=language)
+    return execute_block(block, SOURCE, timeout)
 
 
 class TestCapture:
@@ -87,6 +99,30 @@ class TestProcess:
         assert run("echo [$X]\n").stdout == "[]\n"
 
 
+class TestShells:
+    @pytest.mark.parametrize("shell", [installed(shell) for shell in SHELLS])
+    def test_every_supported_shell_runs_a_body(self, shell):
+        assert run("echo hi\n", language=shell).stdout == "hi\n"
+
+    @pytest.mark.parametrize("shell", [installed(shell) for shell in SHELLS])
+    def test_the_shell_that_runs_is_the_language_of_the_block(self, shell):
+        # $0 is how the shell was invoked, which is the language and nothing else
+        assert run("echo $0\n", language=shell).stdout == f"{shell}\n"
+
+    @pytest.mark.parametrize(
+        ("shell", "variable"),
+        [installed("bash", "BASH_VERSION"), installed("zsh", "ZSH_VERSION")],
+    )
+    def test_the_shell_is_really_that_program(self, shell, variable):
+        # Each of these two announces its version in a variable the other leaves unset
+        assert run(f'echo "[${variable}]"\n', language=shell).stdout != "[]\n"
+
+    @pytest.mark.parametrize("shell", [installed(shell) for shell in SHELLS])
+    def test_a_failing_body_is_caught_whatever_the_shell(self, shell):
+        with pytest.raises(ExitCodeMismatchError):
+            run("exit 3\n", language=shell)
+
+
 class TestExitPolicy:
     def test_expected_zero_passes(self):
         assert run("true\n").exit_code == 0
@@ -134,7 +170,7 @@ class TestFailures:
         assert excinfo.value.timeout == 0.1
         assert str(excinfo.value) == f"{SOURCE}:4: block timed out after 0.1 seconds"
 
-    def test_bash_cannot_be_spawned(self, mocker):
+    def test_the_shell_cannot_be_spawned(self, mocker):
         mocker.patch(
             "lucio.executor.subprocess.run",
             side_effect=FileNotFoundError(2, "No such file or directory", "bash"),
@@ -143,6 +179,16 @@ class TestFailures:
             execute_block(make_block("echo hi\n", line=2), SOURCE, 10.0)
         assert "cannot run bash" in str(excinfo.value)
         assert excinfo.value.line == 2
+
+    @pytest.mark.parametrize("shell", SHELLS)
+    def test_the_shell_that_failed_is_the_one_reported(self, shell, mocker):
+        # No shell is spawned here, so the message must come from the block itself
+        mocker.patch(
+            "lucio.executor.subprocess.run",
+            side_effect=FileNotFoundError(2, "No such file or directory", shell),
+        )
+        with pytest.raises(ExecutionError, match=f"cannot run {shell}"):
+            execute_block(make_block("echo hi\n", language=shell), SOURCE, 10.0)
 
     def test_other_os_errors_are_reported_too(self, mocker):
         mocker.patch("lucio.executor.subprocess.run", side_effect=PermissionError("denied"))

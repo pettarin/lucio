@@ -1,4 +1,4 @@
-"""End-to-end tests for the command line interface, exercised against a real bash.
+"""End-to-end tests for the command line interface, exercised against real shells.
 
 :copyright: Copyright (C) 2026 Alberto Pettarin
 :license: GNU General Public License v3.0 (see the LICENSE file for details)
@@ -6,6 +6,7 @@
 
 import os
 import re
+import shutil
 import time
 
 import pytest
@@ -14,6 +15,7 @@ from click.testing import CliRunner
 from lucio import __version__
 from lucio.cli import _remaining_timeout, _use_pager, main
 from lucio.errors import TotalTimeoutError
+from lucio.parser import SHELLS
 
 ECHO_HI = "```bash lucio command=execute\necho hi\n```\n"
 """The simplest template there is: one execute block printing one line."""
@@ -64,6 +66,14 @@ def settings(
 def workspace(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     return tmp_path
+
+
+def installed(shell):
+    """Turn a shell into one parameter, skipped where it is not on PATH."""
+    return pytest.param(
+        shell,
+        marks=pytest.mark.skipif(shutil.which(shell) is None, reason=f"no {shell} on PATH"),
+    )
 
 
 def run(*arguments):
@@ -306,6 +316,31 @@ class TestRendering:
     def test_nothing_is_written_to_stdout(self, workspace):
         result, _ = render(workspace, ECHO_HI)
         assert result.stdout == ""
+
+
+class TestShells:
+    def template(self, shell):
+        return f"```{shell} lucio command=execute\necho $0\n```\n"
+
+    @pytest.mark.parametrize("shell", [installed(shell) for shell in SHELLS])
+    def test_a_block_is_run_by_the_shell_its_fence_names(self, workspace, shell):
+        # $0 is how the shell was invoked, so the body says which one ran it
+        result, output = render(workspace, self.template(shell))
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == f"```{shell}\necho $0\n{shell}\n```\n"
+
+    @pytest.mark.parametrize("shell", [installed(shell) for shell in SHELLS])
+    def test_the_shell_is_named_in_the_verbose_log(self, workspace, shell):
+        result, _ = render(workspace, self.template(shell), "-v")
+        assert result.exit_code == 0
+        assert f"[DEBU] {INPUT}:1: executing {shell} block\n" in unstamped(result.stderr)
+
+    def test_a_language_that_is_no_shell_exits_three_and_writes_nothing(self, workspace):
+        result, output = render(workspace, "```python lucio command=execute\nprint(1)\n```\n")
+        assert result.exit_code == 3
+        assert f"{INPUT}:1: trigger 'lucio' requires language" in result.stderr
+        assert "'bash', 'sh' or 'zsh', found 'python'" in result.stderr
+        assert not output.exists()
 
 
 class TestStandardOutput:

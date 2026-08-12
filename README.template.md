@@ -212,7 +212,7 @@ or the special value `-1` to disable it.
 | `1`  | OUTPUT could not be written, or it exists and `--overwrite-files` was not given |
 | `2`  | usage error (missing or bad arguments, INPUT and OUTPUT are the same file)      |
 | `3`  | template error: syntax error, or INPUT cannot be read or decoded                |
-| `4`  | execution error: unexpected exit code, timed-out block, `bash` not runnable     |
+| `4`  | execution error: unexpected exit code, timed-out block, shell not runnable      |
 
 On any error other than `0`, OUTPUT is never opened and stdout stays empty:
 a pre-existing OUTPUT is left exactly as it was.
@@ -246,7 +246,8 @@ as its second token are processed:
 A block that does not say otherwise is a `command=include` block,
 and it may carry any language, which is used to fence the file it reads.
 A block that is to be run by Bash must ask for it with `command=execute`,
-and its language must then be `bash`.
+and its language must then be `bash`, `sh` or `zsh`,
+which is also the shell the body is run by.
 The language is copied into the output and never interpreted,
 and it is not checked unless `-L` / `--check-language` is given,
 which validates it against the language names and aliases known to
@@ -317,7 +318,7 @@ to interleave the stdout/stderr contents.
 | `exit`        | `any`, or int in `[0, 255]`      | `0`        | `execute`  | the exit code the block must exit with (if not, `lucio` run fails)                 |
 | `merge`       | `true`, `false`                  | `true`     | `execute`  | put the captured output inside the source fence, rather than in a fence of its own |
 | `path`        | a file path                      | N/A        | `include`  | the file `command=include` reads                                                   |
-| `show_source` | `true`, `false`                  | `true`     | `execute`  | emit the source block, as a plain ```` ```bash ```` fence                          |
+| `show_source` | `true`, `false`                  | `true`     | `execute`  | emit the source block, as a plain ```` ```LANGUAGE ```` fence                      |
 | `stderr`      | `true`, `false`                  | `true`     | `execute`  | include the captured stderr in the output                                          |
 | `stdout`      | `true`, `false`                  | `true`     | `execute`  | include the captured stdout in the output                                          |
 | `style`       | `fence`, `language`, `literal`   | `language` | `include`  | how the included file is wrapped                                                   |
@@ -439,7 +440,12 @@ a run of `lucio` can use either, both or neither.
 
 #### Blocks With `command=execute`
 
-**IMPORTANT**: currently only `LANGUAGE=bash` blocks support `command=execute`.
+**IMPORTANT**: only shell blocks support `command=execute`:
+               `LANGUAGE` must be `bash`, `sh` or `zsh`.
+
+The examples below use `bash`; an `sh` or a `zsh` block behaves exactly the same way,
+with its body run by the shell its fence names,
+and its source fence emitted with that same language.
 
 ````
 ```bash lucio command=execute [exit=0] [show_source=true] [stdout=true] [stderr=true] [merge=true]
@@ -449,7 +455,7 @@ touch /tmp/myfile
 ```
 ````
 
-Each block is executed in its own Bash subprocess,
+Each block is executed in its own subprocess of the shell its fence names,
 with the body passed verbatim and nothing injected into it,
 so shell state (variables, `cd`, functions) does not carry over from one block to the next;
 the filesystem, of course, does.

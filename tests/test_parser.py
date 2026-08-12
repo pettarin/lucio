@@ -10,7 +10,7 @@ import pytest
 
 from lucio.errors import TemplateSyntaxError
 from lucio.model import BlockOptions, BlockSegment, Command, Style, VerbatimSegment
-from lucio.parser import parse_template
+from lucio.parser import SHELLS, parse_template
 
 SOURCE = "doc.template.md"
 
@@ -322,17 +322,25 @@ class TestLanguage:
     def test_the_language_reaches_the_segment_of_an_execute_block(self):
         assert only_block("```bash lucio command=execute\necho hi\n```\n").language == "bash"
 
+    @pytest.mark.parametrize("shell", SHELLS)
+    def test_an_execute_block_carries_any_supported_shell(self, shell):
+        block = only_block(f"```{shell} lucio command=execute\necho hi\n```\n")
+        assert (block.language, block.options.command) == (shell, Command.EXECUTE)
+
     @pytest.mark.parametrize(
         "info",
         [
             "python lucio command=execute",
             "yaml lucio command=execute",
+            "shell lucio command=execute",
+            "console lucio command=execute",
             "Bash lucio command=execute",
+            "Zsh lucio command=execute",
             "bash4 lucio command=execute",
         ],
     )
-    def test_an_execute_block_requires_bash(self, info):
-        with pytest.raises(TemplateSyntaxError, match="requires language 'bash'"):
+    def test_an_execute_block_requires_a_shell_language(self, info):
+        with pytest.raises(TemplateSyntaxError, match="requires language 'bash', 'sh' or 'zsh'"):
             parse(f"```{info}\necho hi\n```\n")
 
     @pytest.mark.parametrize("language", ["yaml", "yml", "js", "sh", "YAML"])
@@ -365,7 +373,11 @@ class TestSyntaxErrors:
         [
             ("~~~bash lucio\necho hi\n~~~\n", "must use backticks", 1),
             ("~~~~bash lucio\necho hi\n~~~~\n", "must use backticks", 1),
-            ("```python lucio command=execute\necho hi\n```\n", "requires language 'bash'", 1),
+            (
+                "```python lucio command=execute\necho hi\n```\n",
+                "requires language 'bash', 'sh' or 'zsh'",
+                1,
+            ),
             ("```bash lucio command=execute foo=1\necho hi\n```\n", "unknown attribute 'foo'", 1),
             (
                 "```bash lucio command=execute Stdout=true\necho hi\n```\n",

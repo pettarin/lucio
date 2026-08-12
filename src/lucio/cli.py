@@ -198,7 +198,7 @@ def main(
                 result = replace(result, stdout=_without_edit_comment(result.stdout))
             return result
 
-        debug(f"{source}:{block.line}: executing bash block")
+        debug(f"{source}:{block.line}: executing {block.language} block")
         allowed = _remaining_timeout(block_timeout, deadline, source, block.line, total_timeout)
         try:
             result = execute_block(block, source, allowed)

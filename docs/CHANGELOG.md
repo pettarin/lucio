@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.8] - 2026-08-12
 
+### Added
+
+- `command=execute` blocks can be written in `sh` and `zsh`, besides `bash`: the language
+  of the trigger fence names the shell the body is run by, and any other language is
+  rejected with `trigger 'lucio' requires language 'bash', 'sh' or 'zsh'`
+
 
 ## [0.0.7] - 2026-08-12
 

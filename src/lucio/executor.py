@@ -1,4 +1,4 @@
-"""Performing the command of a block: bash execution, or reading a file to include.
+"""Performing the command of a block: shell execution, or reading a file to include.
 
 :copyright: Copyright (C) 2026 Alberto Pettarin
 :license: GNU General Public License v3.0 (see the LICENSE file for details)
@@ -17,15 +17,17 @@ from lucio.model import BlockSegment, ExecutionResult
 
 
 def execute_block(block: BlockSegment, source: str, timeout: float | None) -> ExecutionResult:
-    """Run the body of ``block`` in its own bash subprocess and capture its streams.
+    """Run the body of ``block`` in its own subprocess and capture its streams.
 
-    The body is passed verbatim, nothing is injected; the working directory and the
-    environment of the lucio process are inherited; stdin is /dev/null. A None timeout
-    lets the block run for as long as it needs.
+    The shell is the language of the fence, which the parser has already restricted to
+    the ones lucio supports, so nothing else is ever spawned. The body is passed
+    verbatim, nothing is injected; the working directory and the environment of the lucio
+    process are inherited; stdin is /dev/null. A None timeout lets the block run for as
+    long as it needs.
     """
     try:
         process = subprocess.run(
-            ["bash", "-c", block.body],
+            [block.language, "-c", block.body],
             capture_output=True,
             check=False,
             encoding="utf-8",
@@ -38,7 +40,7 @@ def execute_block(block: BlockSegment, source: str, timeout: float | None) -> Ex
         # exc carries the timeout that expired, which cannot be None here
         raise ExecutionTimeoutError(source, block.line, exc.timeout) from exc
     except OSError as exc:
-        raise ExecutionError(source, block.line, f"cannot run bash: {exc}") from exc
+        raise ExecutionError(source, block.line, f"cannot run {block.language}: {exc}") from exc
 
     expected = block.options.expected_exit
     if expected is not None and process.returncode != expected:

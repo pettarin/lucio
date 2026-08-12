@@ -64,7 +64,7 @@ class BlockSegment:
 
 @dataclass(frozen=True, slots=True)
 class ExecutionResult:
-    """The outcome of running one block body through bash."""
+    """The outcome of running one block body through a shell."""
 
     exit_code: int
     stderr: str

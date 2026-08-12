@@ -19,14 +19,16 @@ BOOLEAN_VALUES = {"false": False, "true": True}
 COMMAND_VALUES = {command.value: command for command in Command}
 EXECUTE_ONLY_KEYS = frozenset({"exit", "merge", "show_source", "stderr", "stdout"})
 INCLUDE_ONLY_KEYS = frozenset({"path", "style"})
-LANGUAGE = "bash"
 QUOTE = '"'
+SHELLS = ("bash", "sh", "zsh")
+"""The languages an execute block may carry, each the name of the shell running its body."""
 STYLE_VALUES = {style.value: style for style in Style}
 TRIGGER = "lucio"
 
 _EXIT_RE = re.compile(r"0|[1-9][0-9]{0,2}")
 _FENCE_OPEN_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
 _MAX_EXIT = 255
+_SHELL_LIST = f"{', '.join(repr(shell) for shell in SHELLS[:-1])} or {SHELLS[-1]!r}"
 
 
 class _State(enum.Enum):
@@ -51,7 +53,7 @@ def parse_template(text: str, source: str, check_language: bool = False) -> list
     fence_char = ""
     fence_length = 0
     indent = ""
-    language = LANGUAGE
+    language = ""
     open_line = 0
     options = BlockOptions()
     state = _State.NORMAL
@@ -147,12 +149,16 @@ def _check_command_pairing(command: Command, seen: set[str], source: str, line: 
 
 
 def _check_language_pairing(command: Command, language: str, source: str, line: int) -> None:
-    """Reject a language the command cannot carry; only an include takes any of them."""
-    if command is Command.EXECUTE and language != LANGUAGE:
+    """Reject a language the command cannot carry; only an include takes any of them.
+
+    The language of an execute block names the shell its body is run by, so it must be
+    one lucio can spawn; an include never runs anything and takes them all.
+    """
+    if command is Command.EXECUTE and language not in SHELLS:
         raise TemplateSyntaxError(
             source,
             line,
-            f"trigger '{TRIGGER}' requires language '{LANGUAGE}', found '{language}'",
+            f"trigger '{TRIGGER}' requires language {_SHELL_LIST}, found '{language}'",
         )
 
 
