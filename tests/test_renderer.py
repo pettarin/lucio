@@ -6,7 +6,14 @@
 
 import pytest
 
-from lucio.model import BlockOptions, BlockSegment, Command, ExecutionResult, VerbatimSegment
+from lucio.model import (
+    BlockOptions,
+    BlockSegment,
+    Command,
+    ExecutionResult,
+    Style,
+    VerbatimSegment,
+)
 from lucio.renderer import fence_for, normalize_stream, render_block, render_document
 
 
@@ -15,6 +22,7 @@ def make_block(
     close_line="```\n",
     fence_length=3,
     indent="",
+    language="bash",
     line=1,
     **options,
 ):
@@ -24,6 +32,7 @@ def make_block(
         fence_char="`",
         fence_length=fence_length,
         indent=indent,
+        language=language,
         line=line,
         options=BlockOptions(**options),
     )
@@ -232,21 +241,51 @@ class TestRenderBlockMerged:
 
 
 class TestRenderBlockInclude:
-    def test_stdout_is_pasted_raw(self):
+    def test_the_default_style_fences_with_the_language(self):
         block = make_block(body="", command=Command.INCLUDE)
+        assert render_block(block, make_result(stdout="text\n")) == "```bash\ntext\n```\n"
+
+    def test_the_language_is_the_one_of_the_trigger_fence(self):
+        block = make_block(body="", command=Command.INCLUDE, language="yaml")
+        assert render_block(block, make_result(stdout="key: 1\n")) == "```yaml\nkey: 1\n```\n"
+
+    def test_the_fence_style_drops_the_language(self):
+        block = make_block(body="", command=Command.INCLUDE, language="yaml", style=Style.FENCE)
+        assert render_block(block, make_result(stdout="key: 1\n")) == "```\nkey: 1\n```\n"
+
+    def test_the_literal_style_pastes_the_file_raw(self):
+        block = make_block(body="", command=Command.INCLUDE, style=Style.LITERAL)
         rendered = render_block(block, make_result(stdout="# Title\n\nSome text.\n"))
         assert rendered == "# Title\n\nSome text.\n"
 
-    def test_stdout_is_normalized(self):
-        block = make_block(command=Command.INCLUDE)
-        assert render_block(block, make_result(stdout="text\n\n\n")) == "text\n"
+    def test_the_fence_grows_around_backticks(self):
+        block = make_block(body="", command=Command.INCLUDE, language="md")
+        rendered = render_block(block, make_result(stdout="```\nnested\n```\n"))
+        assert rendered == "````md\n```\nnested\n```\n````\n"
 
-    def test_empty_stdout_renders_nothing(self):
-        block = make_block(command=Command.INCLUDE)
+    def test_the_fence_sits_at_column_zero(self):
+        block = make_block(body="", command=Command.INCLUDE, indent="  ")
+        assert render_block(block, make_result(stdout="text\n")) == "```bash\ntext\n```\n"
+
+    @pytest.mark.parametrize(
+        ("style", "expected"),
+        [
+            (Style.FENCE, "```\ntext\n```\n"),
+            (Style.LANGUAGE, "```bash\ntext\n```\n"),
+            (Style.LITERAL, "text\n"),
+        ],
+    )
+    def test_stdout_is_normalized(self, style, expected):
+        block = make_block(body="", command=Command.INCLUDE, style=style)
+        assert render_block(block, make_result(stdout="text\n\n\n")) == expected
+
+    @pytest.mark.parametrize("style", list(Style))
+    def test_empty_stdout_renders_nothing(self, style):
+        block = make_block(body="", command=Command.INCLUDE, style=style)
         assert render_block(block, make_result(stdout="\n")) == ""
 
     def test_source_and_stderr_are_ignored(self):
-        block = make_block(command=Command.INCLUDE)
+        block = make_block(command=Command.INCLUDE, style=Style.LITERAL)
         assert render_block(block, make_result(stdout="text\n", stderr="warning\n")) == "text\n"
 
 
@@ -358,7 +397,7 @@ class TestRenderDocument:
     def test_include_output_is_pasted_between_verbatim_segments(self):
         segments = [
             VerbatimSegment(text="before\n\n"),
-            make_block(command=Command.INCLUDE),
+            make_block(command=Command.INCLUDE, style=Style.LITERAL),
             VerbatimSegment(text="\nafter\n"),
         ]
         rendered = render_document(segments, constant_runner(make_result(stdout="# Included\n")))

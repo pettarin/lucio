@@ -28,6 +28,7 @@ def make_block(body, expected_exit=0, line=1):
         fence_char="`",
         fence_length=3,
         indent="",
+        language="bash",
         line=line,
         options=BlockOptions(expected_exit=expected_exit),
     )

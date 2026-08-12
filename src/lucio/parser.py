@@ -9,16 +9,19 @@ import re
 from pathlib import Path
 
 from lucio.errors import TemplateSyntaxError
-from lucio.model import BlockOptions, BlockSegment, Command, Segment, VerbatimSegment
+from lucio.languages import LANGUAGES
+from lucio.model import BlockOptions, BlockSegment, Command, Segment, Style, VerbatimSegment
 
 ATTRIBUTE_KEYS = frozenset(
-    {"command", "exit", "merge", "path", "show_source", "stderr", "stdout"}
+    {"command", "exit", "merge", "path", "show_source", "stderr", "stdout", "style"}
 )
 BOOLEAN_VALUES = {"false": False, "true": True}
 COMMAND_VALUES = {command.value: command for command in Command}
 EXECUTE_ONLY_KEYS = frozenset({"exit", "merge", "show_source", "stderr", "stdout"})
+INCLUDE_ONLY_KEYS = frozenset({"path", "style"})
 LANGUAGE = "bash"
 QUOTE = '"'
+STYLE_VALUES = {style.value: style for style in Style}
 TRIGGER = "lucio"
 
 _EXIT_RE = re.compile(r"0|[1-9][0-9]{0,2}")
@@ -34,11 +37,12 @@ class _State(enum.Enum):
     NORMAL = enum.auto()
 
 
-def parse_template(text: str, source: str) -> list[Segment]:
+def parse_template(text: str, source: str, check_language: bool = False) -> list[Segment]:
     """Split ``text`` into verbatim segments and trigger blocks, in document order.
 
     No block is executed: the whole template is validated first, so syntax errors
-    surface before anything runs.
+    surface before anything runs. With ``check_language``, the language of a trigger
+    fence must be one highlight.js knows.
     """
     segments: list[Segment] = []
     verbatim: list[str] = []
@@ -47,6 +51,7 @@ def parse_template(text: str, source: str) -> list[Segment]:
     fence_char = ""
     fence_length = 0
     indent = ""
+    language = LANGUAGE
     open_line = 0
     options = BlockOptions()
     state = _State.NORMAL
@@ -73,6 +78,7 @@ def parse_template(text: str, source: str) -> list[Segment]:
                         fence_char=fence_char,
                         fence_length=fence_length,
                         indent=indent,
+                        language=language,
                         line=open_line,
                         options=options,
                     )
@@ -105,10 +111,15 @@ def parse_template(text: str, source: str) -> list[Segment]:
         if verbatim:
             segments.append(VerbatimSegment(text="".join(verbatim)))
             verbatim = []
+        tokens = _split_info(info, source, number)
         fence_char = fence[0]
         fence_length = len(fence)
         indent = match.group(1)
-        options = _parse_attributes(_split_info(info, source, number)[2:], source, number)
+        language = tokens[0]
+        if check_language and language.lower() not in LANGUAGES:
+            raise TemplateSyntaxError(source, number, f"unknown language '{language}'")
+        options = _parse_attributes(tokens[2:], source, number)
+        _check_language_pairing(options.command, language, source, number)
         state = _State.IN_FENCE_TRIGGER
 
     if state is not _State.NORMAL:
@@ -129,22 +140,31 @@ def _check_command_pairing(command: Command, seen: set[str], source: str, line: 
             raise TemplateSyntaxError(
                 source, line, f"'{unusable[0]}' does not apply to 'command={include}'"
             )
-    elif "path" in seen:
-        raise TemplateSyntaxError(source, line, f"'path' requires 'command={include}'")
+        return
+    unusable = sorted(seen & INCLUDE_ONLY_KEYS)
+    if unusable:
+        raise TemplateSyntaxError(source, line, f"'{unusable[0]}' requires 'command={include}'")
 
 
-def _classify_info_string(info: str, fence_char: str, source: str, line: int) -> bool:
-    """Return whether the info string opens a trigger fence rather than an ordinary one."""
-    tokens = _split_info(info, source, line)
-    if len(tokens) < 2 or tokens[1] != TRIGGER:
-        return False
-    language = tokens[0]
-    if language != LANGUAGE:
+def _check_language_pairing(command: Command, language: str, source: str, line: int) -> None:
+    """Reject a language the command cannot carry; only an include takes any of them."""
+    if command is Command.EXECUTE and language != LANGUAGE:
         raise TemplateSyntaxError(
             source,
             line,
             f"trigger '{TRIGGER}' requires language '{LANGUAGE}', found '{language}'",
         )
+
+
+def _classify_info_string(info: str, fence_char: str, source: str, line: int) -> bool:
+    """Return whether the info string opens a trigger fence rather than an ordinary one.
+
+    Any language opens one; which of them a command may carry is settled later, once
+    the attributes have been read.
+    """
+    tokens = _split_info(info, source, line)
+    if len(tokens) < 2 or tokens[1] != TRIGGER:
+        return False
     if fence_char != "`":
         raise TemplateSyntaxError(source, line, "trigger fences must use backticks, not tildes")
     return True
@@ -159,6 +179,7 @@ def _parse_attributes(attrs: list[str], source: str, line: int) -> BlockOptions:
     show_source = True
     stderr = True
     stdout = True
+    style = Style.LANGUAGE
     seen: set[str] = set()
 
     for token in attrs:
@@ -190,8 +211,14 @@ def _parse_attributes(attrs: list[str], source: str, line: int) -> BlockOptions:
             show_source = _parse_boolean(key, value, source, line)
         elif key == "stderr":
             stderr = _parse_boolean(key, value, source, line)
-        else:
+        elif key == "stdout":
             stdout = _parse_boolean(key, value, source, line)
+        else:
+            if value not in STYLE_VALUES:
+                raise TemplateSyntaxError(
+                    source, line, f"unknown value '{value}' for attribute 'style'"
+                )
+            style = STYLE_VALUES[value]
 
     _check_command_pairing(command, seen, source, line)
     return BlockOptions(
@@ -202,6 +229,7 @@ def _parse_attributes(attrs: list[str], source: str, line: int) -> BlockOptions:
         show_source=show_source,
         stderr=stderr,
         stdout=stdout,
+        style=style,
     )
 
 

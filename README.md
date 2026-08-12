@@ -46,7 +46,7 @@ for the human user to manually author and maintain.
 - Stdout/stderr contents can be merged or kept separate from the source block
 - Support fo "hidden" setup blocks to run commands
   but that must be omitted from the rendered document
-- Raw Markdown file inclusion by path relative to the template
+- File inclusion by path relative to the template, raw or fenced in any language
 - Check on exit codes, allowing for documenting expected failing behavior
   while still catching unexpected errors via tool failure
 - Syntax errors surface before any block is executed
@@ -106,7 +106,7 @@ You should be able to run:
 
 ```bash
 lucio --version
-lucio, version 0.0.6
+lucio, version 0.0.7
 ```
 
 (dropping the `(lucio_env) $` prefix in the examples from now on).
@@ -139,6 +139,8 @@ Options:
   -D, --do-not-color              Do not color the messages of the tool.
   -E, --omit-do-not-edit-comment  Do not open the rendered document with the
                                   do-not-edit comment.
+  -L, --check-language            Reject a fence whose language highlight.js
+                                  does not know.
   -O, --overwrite-files           Overwrite OUTPUT if it already exists.
   -P, --pager                     Print the data output through a pager (when
                                   on a terminal).
@@ -214,9 +216,11 @@ under the logger named `lucio`, and come out on stderr stamped with the UTC time
 ```
 [2026-08-11T10:14:52.310Z] [DEBU] Input file: "/home/user/lucio/README.template.md"
 [2026-08-11T10:14:52.310Z] [DEBU] Output file: "/home/user/lucio/README.md"
+[2026-08-11T10:14:52.310Z] [DEBU] Check language: False
 [2026-08-11T10:14:52.310Z] [DEBU] Omit do-not-edit comment: False
 [2026-08-11T10:14:52.311Z] [DEBU] Overwrite files: True
 [2026-08-11T10:14:52.311Z] [DEBU] Pager: False
+[2026-08-11T10:14:52.311Z] [DEBU] Remove do-not-edit comment on include: False
 [2026-08-11T10:14:52.311Z] [DEBU] Block timeout: 60.0 seconds
 [2026-08-11T10:14:52.311Z] [DEBU] Total timeout: 300.0 seconds
 [2026-08-11T10:14:52.312Z] [INFO] Rendering "README.template.md" into "README.md"...
@@ -269,12 +273,22 @@ a pre-existing OUTPUT is left exactly as it was.
 
 ## Template Syntax
 
-Only fences annotated with the trigger word `lucio` are processed:
+Only fences whose info string has the trigger word `lucio`
+as its second token are processed:
 
 ````
-```bash lucio [key=value ...]
+```LANGUAGE lucio [key=value ...]
 ```
 ````
+
+A `command=execute` block, which is the default, is run by Bash,
+so its language must be `bash`;
+a `command=include` block may carry any language,
+which is used to fence the file it reads.
+The language is copied into the output and never interpreted,
+and it is not checked unless `-L` / `--check-language` is given,
+which validates it against the language names and aliases known to
+[highlight.js](https://github.com/highlightjs/highlight.js/blob/main/SUPPORTED_LANGUAGES.md).
 
 Anything else is ordinary Markdown:
 ```` ```bash ````, ```` ```bash lucioX ````, ```` ```bash run lucio ````,
@@ -282,7 +296,7 @@ Anything else is ordinary Markdown:
 all pass through untouched, as does any trigger fence written inside a longer
 fence (that is how the examples in this file survive).
 
-### Bash Blocks (`bash lucio`)
+### Trigger Blocks (`LANGUAGE lucio`)
 
 The body of the block is executed by Bash, and the block is replaced by
 its source fence and/or what the body printed:
@@ -335,15 +349,16 @@ to interleave the stdout/stderr contents.
 
 #### Attributes
 
-| Key           | Values                      | Default   | Applies To | Meaning                                                                            |
-|---------------|-----------------------------|-----------|------------|------------------------------------------------------------------------------------|
-| `command`     | `execute`, `include`        | `execute` |            | what the block does                                                                |
-| `exit`        | `any`, or int in `[0, 255]` | `0`       | `execute`  | the exit code the block must exit with (if not, `lucio` run fails)                 |
-| `merge`       | `true`, `false`             | `true`    | `execute`  | put the captured output inside the source fence, rather than in a fence of its own |
-| `path`        | a file path                 | N/A       | `include`  | the file `command=include` reads                                                   |
-| `show_source` | `true`, `false`             | `true`    | `execute`  | emit the source block, as a plain ```` ```bash ```` fence                          |
-| `stderr`      | `true`, `false`             | `true`    | `execute`  | include the captured stderr in the output                                          |
-| `stdout`      | `true`, `false`             | `true`    | `execute`  | include the captured stdout in the output                                          |
+| Key           | Values                           | Default    | Applies To | Meaning                                                                            |
+|---------------|----------------------------------|------------|------------|------------------------------------------------------------------------------------|
+| `command`     | `execute`, `include`             | `execute`  |            | what the block does                                                                |
+| `exit`        | `any`, or int in `[0, 255]`      | `0`        | `execute`  | the exit code the block must exit with (if not, `lucio` run fails)                 |
+| `merge`       | `true`, `false`                  | `true`     | `execute`  | put the captured output inside the source fence, rather than in a fence of its own |
+| `path`        | a file path                      | N/A        | `include`  | the file `command=include` reads                                                   |
+| `show_source` | `true`, `false`                  | `true`     | `execute`  | emit the source block, as a plain ```` ```bash ```` fence                          |
+| `stderr`      | `true`, `false`                  | `true`     | `execute`  | include the captured stderr in the output                                          |
+| `stdout`      | `true`, `false`                  | `true`     | `execute`  | include the captured stdout in the output                                          |
+| `style`       | `fence`, `language`, `literal`   | `language` | `include`  | how the included file is wrapped                                                   |
 
 Attributes are `key=value` tokens, separated by whitespace.
 A value may be wrapped in double quotes, and must be if it contains spaces,
@@ -372,11 +387,11 @@ echo "answer: 42" > ./myotherfile.yaml
 ```
 ````
 
-As anticipated above, there are two types of Bash blocks,
+As anticipated above, there are two types of trigger blocks,
 depending on the `command` attribute: `command=execute` blocks (default),
 and `command=include` blocks, described in the next subsections.
 
-#### Bash Blocks With `command=execute`
+#### Blocks With `command=execute`
 
 ````
 ```bash lucio [command=execute] [exit=0] [show_source=true] [stdout=true] [stderr=true] [merge=true]
@@ -410,21 +425,21 @@ The verbose log will show something similar to the following:
 [2026-08-11T10:14:53.118Z] [DEBU] README.template.md:24: exit code 3 (permitted by exit=any)
 ```
 
-#### Bash Blocks With `command=include`
+#### Blocks With `command=include`
 
 ````
-```bash lucio command=include path=CONFIGURATION_FILE.md
+```LANGUAGE lucio command=include path=CONFIGURATION_FILE.md [style=language]
 ```
 ````
 
-The file named by `path` is pasted raw, as Markdown, in place of the block:
-no source fence, no output fence, and no Bash execution is involved.
-The block takes no attribute other than `path`, nor body.
+The file named by `path` is read and put in place of the block:
+no Bash execution is involved, and the block takes no attribute
+other than `path` and `style`, nor body.
 Timeouts do not apply, since no processing happens.
 
 A relative `path` is resolved against **the directory of the template**,
 so a template and the files it includes travel together and can be rendered from anywhere.
-Note that this differs from the Bash blocks, which run in the working
+Note that this differs from the `command=execute` blocks, which run in the working
 directory `lucio` was invoked from.
 
 An absolute `path` is taken as it is. A leading `~` and any `$VARIABLE` or
@@ -432,7 +447,38 @@ An absolute `path` is taken as it is. A leading `~` and any `$VARIABLE` or
 without hard-coding a machine; naming a variable that is not set aborts the run,
 rather than silently reading from the wrong place.
 
-The file is pasted as it is: a trigger fence inside it is text,
+The `style` attribute says how the file is wrapped:
+
+| Value      | Result                                                                |
+|------------|------------------------------------------------------------------------|
+| `fence`    | the file inside a fence with no language                              |
+| `language` | the file inside a fence carrying the language of the trigger (default) |
+| `literal`  | the file pasted raw, as Markdown                                      |
+
+So, if `configuration.yaml` contains `answer: 42`, the block:
+
+````
+```yaml lucio command=include path=configuration.yaml
+```
+````
+
+renders as:
+
+````
+```yaml
+answer: 42
+```
+````
+
+while `style=fence` emits the same fence without the `yaml` label,
+and `style=literal` pastes `answer: 42` alone.
+The language is still the first token of the info string
+even when `style=literal` makes no use of it.
+The emitted fence grows as needed to clear any backtick run in the file,
+and it always sits at column 0.
+An empty file contributes nothing, whatever the style.
+
+The file is never interpreted: a trigger fence inside it is text,
 not something `lucio` renders in turn.
 A file that cannot be read aborts the run, like any other failing block.
 
@@ -442,7 +488,7 @@ Option `-R` / `--remove-do-not-edit-comment-on-include` drops that opening comme
 and the blank line below it, from every file included in the run:
 
 ````
-```bash lucio command=include path=PART.md
+```markdown lucio command=include path=PART.md style=literal
 ```
 ````
 

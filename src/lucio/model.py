@@ -16,6 +16,14 @@ class Command(enum.Enum):
     INCLUDE = "include"
 
 
+class Style(enum.Enum):
+    """How an include wraps the file it reads, as spelled by its ``style`` attribute."""
+
+    FENCE = "fence"
+    LANGUAGE = "language"
+    LITERAL = "literal"
+
+
 @dataclass(frozen=True, slots=True)
 class BlockOptions:
     """The attributes of a trigger fence, resolved against their defaults."""
@@ -30,6 +38,8 @@ class BlockOptions:
     show_source: bool = True
     stderr: bool = True
     stdout: bool = True
+    style: Style = Style.LANGUAGE
+    """How an include wraps the file; meaningless for any other command."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +55,8 @@ class BlockSegment:
     """The length of the opening backtick run, at least 3."""
     indent: str
     """The 0 to 3 spaces preceding the opening fence."""
+    language: str
+    """The first token of the info string, copied into the emitted fence."""
     line: int
     """The 1-based line number of the opening fence in the template."""
     options: BlockOptions

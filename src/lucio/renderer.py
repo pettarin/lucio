@@ -7,7 +7,7 @@
 import re
 from collections.abc import Callable
 
-from lucio.model import BlockSegment, Command, ExecutionResult, Segment, VerbatimSegment
+from lucio.model import BlockSegment, Command, ExecutionResult, Segment, Style, VerbatimSegment
 
 MIN_FENCE_LENGTH = 3
 
@@ -29,7 +29,7 @@ def normalize_stream(text: str) -> str:
 def render_block(block: BlockSegment, result: ExecutionResult) -> str:
     """Render one block: one merged fence, a source fence, an output fence, or nothing."""
     if block.options.command is Command.INCLUDE:
-        return normalize_stream(result.stdout)
+        return _render_included(block, normalize_stream(result.stdout))
 
     options = block.options
     selected = ""
@@ -43,7 +43,7 @@ def render_block(block: BlockSegment, result: ExecutionResult) -> str:
 
     parts: list[str] = []
     if options.show_source:
-        parts.append(f"{block.indent}{block.fence_char * block.fence_length}bash\n")
+        parts.append(f"{block.indent}{block.fence_char * block.fence_length}{block.language}\n")
         parts.append(block.body)
         parts.append(block.close_line)
     if selected:
@@ -89,6 +89,20 @@ def render_document(
     return rendered if rendered == "" else f"{rendered.rstrip('\n')}\n"
 
 
+def _render_included(block: BlockSegment, content: str) -> str:
+    """Wrap the content of an include as its style asks, or paste it as it is.
+
+    An empty file contributes nothing whatever the style, as an execute block whose
+    output is empty does; the fence sits at column 0, where the raw paste lands.
+    """
+    style = block.options.style
+    if not content or style is Style.LITERAL:
+        return content
+    fence = fence_for(content)
+    info = block.language if style is Style.LANGUAGE else ""
+    return f"{fence}{info}\n{content}{fence}\n"
+
+
 def _render_merged(block: BlockSegment, selected: str) -> str:
     """Render the source and the captured output as a single fence, a terminal transcript.
 
@@ -98,4 +112,4 @@ def _render_merged(block: BlockSegment, selected: str) -> str:
     length = max(block.fence_length, len(fence_for(selected)))
     fence = block.fence_char * length
     closing = block.close_line if length == block.fence_length else f"{block.indent}{fence}\n"
-    return f"{block.indent}{fence}bash\n{block.body}{selected}{closing}"
+    return f"{block.indent}{fence}{block.language}\n{block.body}{selected}{closing}"

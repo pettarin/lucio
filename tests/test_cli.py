@@ -33,6 +33,7 @@ def settings(
     workspace,
     output=OUTPUT,
     block="60.0 seconds",
+    check=False,
     omit=True,
     overwrite=False,
     pager=False,
@@ -47,6 +48,7 @@ def settings(
     return (
         f'[DEBU] Input file: "{(workspace / INPUT).resolve()}"\n'
         f"[DEBU] Output file: {destination}\n"
+        f"[DEBU] Check language: {check}\n"
         f"[DEBU] Omit do-not-edit comment: {omit}\n"
         f"[DEBU] Overwrite files: {overwrite}\n"
         f"[DEBU] Pager: {pager}\n"
@@ -238,7 +240,8 @@ class TestRendering:
     def test_include_pastes_the_file_raw(self, workspace):
         (workspace / "OTHER.md").write_text("## Included\n\nSome text.\n", encoding="utf-8")
         template = (
-            "# Title\n\n```bash lucio command=include path=OTHER.md\n```\n\nThe end.\n"
+            "# Title\n\n```bash lucio command=include path=OTHER.md style=literal\n"
+            "```\n\nThe end.\n"
         )
         result, output = render(workspace, template)
         assert result.exit_code == 0
@@ -666,6 +669,11 @@ class TestVerbose:
         assert result.exit_code == 0
         assert unstamped(result.stderr).startswith(settings(workspace, output="elsewhere.md"))
 
+    def test_the_settings_report_the_check_language_flag(self, workspace):
+        result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v", "-L")
+        assert result.exit_code == 0
+        assert unstamped(result.stderr).startswith(settings(workspace, check=True))
+
     def test_the_settings_report_the_pager_flag(self, workspace):
         result, _ = render(workspace, "```bash lucio\necho hi\n```\n", "-v", "-P")
         assert result.exit_code == 0
@@ -813,7 +821,7 @@ class TestFailures:
 
 
 class TestInclude:
-    INCLUDING = "# Guide\n\n```bash lucio command=include path=PART.md\n```\n\nEnd.\n"
+    INCLUDING = "# Guide\n\n```bash lucio command=include path=PART.md style=literal\n```\n\nEnd.\n"
     PART = "## Part\n\nIncluded text.\n"
     RENDERED = "# Guide\n\n## Part\n\nIncluded text.\n\nEnd.\n"
 
@@ -839,7 +847,7 @@ class TestInclude:
         (workspace / "elsewhere" / "PART.md").write_text(self.PART, encoding="utf-8")
         template = (
             "# Guide\n\n```bash lucio command=include "
-            f"path={workspace / 'elsewhere' / 'PART.md'}\n```\n\nEnd.\n"
+            f"path={workspace / 'elsewhere' / 'PART.md'} style=literal\n```\n\nEnd.\n"
         )
         (workspace / INPUT).write_text(template, encoding="utf-8")
         result = run("-E", INPUT, STDOUT)
@@ -850,7 +858,8 @@ class TestInclude:
         (workspace / "with spaces").mkdir()
         (workspace / "with spaces" / "PART.md").write_text(self.PART, encoding="utf-8")
         (workspace / INPUT).write_text(
-            '# Guide\n\n```bash lucio command=include path="with spaces/PART.md"\n```\n\nEnd.\n',
+            '# Guide\n\n```bash lucio command=include path="with spaces/PART.md" '
+            "style=literal\n```\n\nEnd.\n",
             encoding="utf-8",
         )
         result = run("-E", INPUT, STDOUT)
@@ -863,7 +872,7 @@ class TestInclude:
         (home / "PART.md").write_text(self.PART, encoding="utf-8")
         monkeypatch.setenv("HOME", str(home))
         (workspace / INPUT).write_text(
-            "# Guide\n\n```bash lucio command=include path=~/PART.md\n```\n\nEnd.\n",
+            "# Guide\n\n```bash lucio command=include path=~/PART.md style=literal\n```\n\nEnd.\n",
             encoding="utf-8",
         )
         result = run("-E", INPUT, STDOUT)
@@ -877,7 +886,7 @@ class TestInclude:
         (parts / "PART.md").write_text(self.PART, encoding="utf-8")
         monkeypatch.setenv("PARTS", str(parts))
         (workspace / INPUT).write_text(
-            f"# Guide\n\n```bash lucio command=include path={written}\n```\n\nEnd.\n",
+            f"# Guide\n\n```bash lucio command=include path={written} style=literal\n```\n\nEnd.\n",
             encoding="utf-8",
         )
         result = run("-E", INPUT, STDOUT)
@@ -890,8 +899,8 @@ class TestInclude:
         (parts / "PART.md").write_text(self.PART, encoding="utf-8")
         monkeypatch.setenv("PARTS", str(workspace / "parts"))
         (workspace / INPUT).write_text(
-            '# Guide\n\n```bash lucio command=include path="$PARTS/with spaces/PART.md"\n'
-            "```\n\nEnd.\n",
+            '# Guide\n\n```bash lucio command=include path="$PARTS/with spaces/PART.md" '
+            'style=literal\n```\n\nEnd.\n',
             encoding="utf-8",
         )
         result = run("-E", INPUT, STDOUT)
@@ -900,7 +909,7 @@ class TestInclude:
 
     def test_an_unset_variable_exits_four(self, workspace, monkeypatch):
         monkeypatch.delenv("NOPE", raising=False)
-        template = "```bash lucio command=include path=$NOPE/PART.md\n```\n"
+        template = "```bash lucio command=include path=$NOPE/PART.md style=literal\n```\n"
         result, output = render(workspace, template)
         assert result.exit_code == 4
         assert "environment variable 'NOPE' is not set" in result.stderr
@@ -909,7 +918,7 @@ class TestInclude:
 
     @pytest.mark.parametrize("written", ["price$.md", "${BAD-NAME}.md"])
     def test_what_is_not_a_reference_stays_literal(self, workspace, written):
-        template = f"```bash lucio command=include path={written}\n```\n"
+        template = f"```bash lucio command=include path={written} style=literal\n```\n"
         result, _ = render(workspace, template)
         assert result.exit_code == 4
         # Read as written, so it fails on the file rather than on a variable
@@ -920,7 +929,7 @@ class TestInclude:
         parts.mkdir()
         (parts / "PART.md").write_text(self.PART, encoding="utf-8")
         monkeypatch.setenv("PARTS", str(parts))
-        template = "```bash lucio command=include path=$PARTS/PART.md\n```\n"
+        template = "```bash lucio command=include path=$PARTS/PART.md style=literal\n```\n"
         result, _ = render(workspace, template, "-v")
         assert result.exit_code == 0
         assert f'including "{parts / "PART.md"}"' in result.stderr
@@ -946,12 +955,87 @@ class TestInclude:
         assert output.read_text(encoding="utf-8") == f"# Guide\n\n{part}\nEnd.\n"
 
 
+class TestIncludeStyle:
+    CONFIG = "key: value\nlist:\n  - one\n"
+
+    def include(self, workspace, language, attributes="", part=None):
+        (workspace / "PART.yaml").write_text(
+            self.CONFIG if part is None else part, encoding="utf-8"
+        )
+        info = f"{language} lucio command=include path=PART.yaml {attributes}".rstrip()
+        return render(workspace, f"# Guide\n\n```{info}\n```\n\nEnd.\n")
+
+    def test_the_language_of_the_fence_wraps_the_file(self, workspace):
+        result, output = self.include(workspace, "yaml")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == (
+            f"# Guide\n\n```yaml\n{self.CONFIG}```\n\nEnd.\n"
+        )
+
+    def test_the_language_style_says_the_default_out_loud(self, workspace):
+        result, output = self.include(workspace, "yaml", "style=language")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == (
+            f"# Guide\n\n```yaml\n{self.CONFIG}```\n\nEnd.\n"
+        )
+
+    def test_the_fence_style_drops_the_language(self, workspace):
+        result, output = self.include(workspace, "yaml", "style=fence")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == (
+            f"# Guide\n\n```\n{self.CONFIG}```\n\nEnd.\n"
+        )
+
+    def test_the_literal_style_pastes_the_file(self, workspace):
+        result, output = self.include(workspace, "yaml", "style=literal")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == f"# Guide\n\n{self.CONFIG}\nEnd.\n"
+
+    def test_the_fence_grows_around_a_fence_in_the_file(self, workspace):
+        part = "```yaml\nkey: value\n```\n"
+        result, output = self.include(workspace, "markdown", part=part)
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == (
+            f"# Guide\n\n````markdown\n{part}````\n\nEnd.\n"
+        )
+
+    @pytest.mark.parametrize("style", ["fence", "language", "literal"])
+    def test_an_empty_file_contributes_nothing(self, workspace, style):
+        result, output = self.include(workspace, "yaml", f"style={style}", part="")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == "# Guide\n\nEnd.\n"
+
+
+class TestCheckLanguage:
+    def template(self, language):
+        return f"```{language} lucio command=include path=PART.md\n```\n"
+
+    def test_an_unknown_language_exits_three_and_writes_nothing(self, workspace):
+        result, output = render(workspace, self.template("zzz"), "-L")
+        assert result.exit_code == 3
+        assert f"{INPUT}:1: unknown language 'zzz'" in result.stderr
+        assert not output.exists()
+
+    @pytest.mark.parametrize("language", ["yaml", "yml", "md"])
+    def test_a_known_language_is_accepted(self, workspace, language):
+        (workspace / "PART.md").write_text("text\n", encoding="utf-8")
+        result, output = render(workspace, self.template(language), "--check-language")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == f"```{language}\ntext\n```\n"
+
+    def test_no_language_is_checked_without_the_option(self, workspace):
+        (workspace / "PART.md").write_text("text\n", encoding="utf-8")
+        result, output = render(workspace, self.template("zzz"))
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == "```zzz\ntext\n```\n"
+
+
 class TestRemoveEditCommentOnInclude:
     BANNER = (
         "<!-- This file PART.md has been rendered by CLI tool 'lucio'. "
         "Do not edit this file, but rather its template PART.template.md . -->"
     )
-    INCLUDING = "# Guide\n\n```bash lucio command=include path=PART.md\n```\n\nEnd.\n"
+    INCLUDING = "# Guide\n\n```bash lucio command=include path=PART.md style=literal\n```\n\nEnd.\n"
 
     def include(self, workspace, part, *arguments):
         (workspace / "PART.md").write_text(part, encoding="utf-8")

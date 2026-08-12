@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.0.7] - 2026-08-12
+
+### Added
+
+- Accept any language on the trigger fence of a `command=include` block, as in
+  ```` ```yaml lucio command=include path=foo.yaml ````; a `command=execute` block
+  still requires `bash`
+- `style` attribute for `command=include`, `fence`, `language` or `literal`, saying
+  whether the included file is wrapped in a fence, and whether that fence carries the
+  language of the trigger
+- `-L` / `--check-language` option, validating the language of every trigger fence
+  against the names and aliases known to highlight.js
+
+### Changed
+
+- **Breaking**: `command=include` now wraps the file in a fence labeled with the
+  language of the trigger, rather than pasting it raw; the previous behavior is
+  `style=literal`
+
+
 ## [0.0.6] - 2026-08-12
 
 ### Added

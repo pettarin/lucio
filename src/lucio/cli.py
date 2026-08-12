@@ -77,6 +77,13 @@ def _validate_timeout(
     help="Do not open the rendered document with the do-not-edit comment.",
 )
 @click.option(
+    "-L",
+    "--check-language",
+    is_flag=True,
+    default=False,
+    help="Reject a fence whose language highlight.js does not know.",
+)
+@click.option(
     "-O",
     "--overwrite-files",
     is_flag=True,
@@ -127,6 +134,7 @@ def main(
     input_file: Path,
     output_file: Path | None,
     block_timeout: float | None,
+    check_language: bool,
     do_not_color: bool,
     omit_do_not_edit_comment: bool,
     overwrite_files: bool,
@@ -154,6 +162,7 @@ def main(
         input_file,
         destination,
         block_timeout,
+        check_language,
         omit_do_not_edit_comment,
         overwrite_files,
         pager,
@@ -203,7 +212,8 @@ def main(
         return result
 
     try:
-        rendered = render_document(parse_template(text, source), runner)
+        segments = parse_template(text, source, check_language=check_language)
+        rendered = render_document(segments, runner)
     except TemplateError as exc:
         _fail(str(exc), EXIT_TEMPLATE_ERROR)
     except ExecutionError as exc:
@@ -265,6 +275,7 @@ def _log_settings(
     input_file: Path,
     destination: Path | None,
     block_timeout: float | None,
+    check_language: bool,
     omit_do_not_edit_comment: bool,
     overwrite_files: bool,
     pager: bool,
@@ -277,6 +288,7 @@ def _log_settings(
         debug("Output file: standard output")
     else:
         debug(f'Output file: "{destination.resolve()}"')
+    debug(f"Check language: {check_language}")
     debug(f"Omit do-not-edit comment: {omit_do_not_edit_comment}")
     debug(f"Overwrite files: {overwrite_files}")
     debug(f"Pager: {pager}")

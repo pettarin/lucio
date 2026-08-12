@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from lucio.errors import TemplateSyntaxError
-from lucio.model import BlockOptions, BlockSegment, Command, VerbatimSegment
+from lucio.model import BlockOptions, BlockSegment, Command, Style, VerbatimSegment
 from lucio.parser import parse_template
 
 SOURCE = "doc.template.md"
@@ -80,6 +80,7 @@ class TestTrigger:
             fence_char="`",
             fence_length=3,
             indent="",
+            language="bash",
             line=1,
             options=BlockOptions(),
         )
@@ -88,6 +89,20 @@ class TestTrigger:
         block = only_block("```bash lucio command=include path=PART.md\n```\n")
         assert block.options == BlockOptions(command=Command.INCLUDE, path=Path("PART.md"))
         assert block.body == ""
+
+    @pytest.mark.parametrize(
+        ("written", "expected"),
+        [
+            ("style=fence", Style.FENCE),
+            ("style=language", Style.LANGUAGE),
+            ("style=literal", Style.LITERAL),
+            ('style="fence"', Style.FENCE),
+            ("", Style.LANGUAGE),
+        ],
+    )
+    def test_the_include_style(self, written, expected):
+        block = only_block(f"```bash lucio command=include path=P.md {written}\n```\n")
+        assert block.options.style is expected
 
     @pytest.mark.parametrize(
         ("info", "expected"),
@@ -271,6 +286,53 @@ class TestTrigger:
         assert [type(segment) for segment in segments] == [VerbatimSegment, BlockSegment]
 
 
+class TestLanguage:
+    @pytest.mark.parametrize("language", ["bash", "yaml", "json", "python", "zzz"])
+    def test_an_include_carries_any_language(self, language):
+        block = only_block(f"```{language} lucio command=include path=P.md\n```\n")
+        assert block.language == language
+
+    def test_the_language_reaches_the_segment_of_an_execute_block(self):
+        assert only_block("```bash lucio\necho hi\n```\n").language == "bash"
+
+    @pytest.mark.parametrize(
+        "info",
+        [
+            "python lucio",
+            "yaml lucio",
+            "yaml lucio command=execute",
+            "Bash lucio",
+            "bash4 lucio",
+        ],
+    )
+    def test_an_execute_block_requires_bash(self, info):
+        with pytest.raises(TemplateSyntaxError, match="requires language 'bash'"):
+            parse(f"```{info}\necho hi\n```\n")
+
+    @pytest.mark.parametrize("language", ["yaml", "yml", "js", "sh", "YAML"])
+    def test_a_known_language_passes_the_check(self, language):
+        text = f"```{language} lucio command=include path=P.md\n```\n"
+        segments = parse_template(text, SOURCE, check_language=True)
+        assert len(segments) == 1
+
+    @pytest.mark.parametrize("language", ["zzz", "yamll", "not-a-language"])
+    def test_an_unknown_language_fails_the_check(self, language):
+        text = f"```{language} lucio command=include path=P.md\n```\n"
+        with pytest.raises(TemplateSyntaxError) as excinfo:
+            parse_template(text, SOURCE, check_language=True)
+        assert f"unknown language '{language}'" in str(excinfo.value)
+        assert excinfo.value.line == 1
+
+    @pytest.mark.parametrize("language", ["yaml", "zzz"])
+    def test_no_language_is_checked_by_default(self, language):
+        block = only_block(f"```{language} lucio command=include path=P.md\n```\n")
+        assert block.language == language
+
+    def test_the_check_does_not_look_at_an_ordinary_fence(self):
+        text = "```zzz\nplain\n```\n"
+        assert parse_template(text, SOURCE, check_language=True) == [VerbatimSegment(text=text)]
+
+
 class TestSyntaxErrors:
     @pytest.mark.parametrize(
         ("text", "fragment", "line"),
@@ -312,6 +374,27 @@ class TestSyntaxErrors:
                 1,
             ),
             ("```bash lucio path=P.md\necho hi\n```\n", "'path' requires", 1),
+            ("```bash lucio style=fence\necho hi\n```\n", "'style' requires", 1),
+            (
+                "```bash lucio style=literal show_source=false\necho hi\n```\n",
+                "'style' requires",
+                1,
+            ),
+            (
+                "```bash lucio command=include path=P.md style=raw\n```\n",
+                "unknown value 'raw' for attribute 'style'",
+                1,
+            ),
+            (
+                "```bash lucio command=include path=P.md style=Fence\n```\n",
+                "unknown value 'Fence'",
+                1,
+            ),
+            (
+                "```bash lucio command=include path=P.md style=fence style=literal\n```\n",
+                "duplicate attribute",
+                1,
+            ),
             (
                 "```bash lucio command=include path=P.md\necho hi\n```\n",
                 "takes no body",
