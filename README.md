@@ -8,44 +8,49 @@ Render Markdown templates by executing embedded shell or code blocks.
 ## Overview
 
 `lucio` reads a GitHub-flavored Markdown template,
-executes the fenced shell or code blocks that opted in,
+executes the fenced shell or code blocks
+that are annotated for its consumption,
 and writes a rendered Markdown file:
 
 ```bash
-lucio README.template.md
+lucio README.template.md README.md
 ```
 
-It is strictly template-to-output, never in-place,
-and everything that did not opt in passes through byte-for-byte:
-tabs, trailing spaces, indented fences, tilde fences, HTML comments,
-and code blocks that merely talk about `lucio` are all left alone.
+`lucio` is strictly template-to-output, never edits in-place,
+and fences that are not explicitly marked for `lucio`
+pass through byte-for-byte: tabs, trailing spaces, indented fences,
+tilde fences, HTML comments, are all left intact.
 
-The typical use case is documentation that must not go stale:
+The typical use case is automating the update of documentation
+for command line tools:
 the template holds the commands, the rendered file holds
-the commands and the output they produced when the file was generated.
-
-`lucio` has been developed to render the Markdown files
+the commands and the output they produce.
+Indeed `lucio` has been developed to render the Markdown files
 forming the CLI usage guide for
-[`volumito`](https://github.com/pettarin/volumito);
-the design strive to achieve flexibility
+[`volumito`](https://github.com/pettarin/volumito).
+
+The design of `lucio` aims at achieving flexibility
 while keeping the tool extremely light
-(just a PyPI package with minimal dependencies)
+(it is published as the sdist PyPI package
+[lucio](https://pypi.org/project/lucio/)
+requiring only minimal dependencies)
 and the annotations reasonably short and simple
-for the human user to add.
+for the human user to manually author and maintain.
 
 
 ## Features
 
-- Simple trigger syntax based on fenced block annotations
+- Simple trigger syntax based on annotations on fenced blocks
 - Byte-for-byte passthrough of everything that is not a trigger block
-- Source block, captured stdout, and captured stderr, each shown or hidden per block
-- Output merged into the source fence, as a terminal transcript, or kept in a fence of its own
-- Hidden setup blocks, for the commands that prepare the stage but must not appear
-- Raw Markdown file inclusion, by path, relative to the template
-- Check on exit codes, allowing for documenting failing behavior
-  while still catching unexpected errors
+- Block source, captured stdout, and captured stderr, each shown or hidden per block
+- Stdout/stderr contents can be merged or kept separate from the source block
+- Support fo "hidden" setup blocks to run commands
+  but that must be omitted from the rendered document
+- Raw Markdown file inclusion by path relative to the template
+- Check on exit codes, allowing for documenting expected failing behavior
+  while still catching unexpected errors via tool failure
 - Syntax errors surface before any block is executed
-- AI-generated, Human-reviewed code
+- AI-generated, Human-reviewed and Human-tested code
 - Type-safe implementation with type hints
 - Comprehensive unit test coverage (100%)
 
@@ -66,8 +71,8 @@ for the human user to add.
 ### From PyPI (Recommended)
 
 `lucio` is published on PyPI as the same-name package
-[lucio](https://pypi.org/project/lucio/)
-, and this is the recommended way of installing it for most users.
+[lucio](https://pypi.org/project/lucio/),
+and this is the recommended way of installing it for most users.
 
 Only the first time: create a virtual environment,
 activate it, and install the latest release of `lucio`
@@ -107,6 +112,9 @@ lucio, version 0.0.5
 (dropping the `(lucio_env) $` prefix in the examples from now on).
 
 ## Usage
+
+**IMPORTANT**: `lucio` might execute dangerous/irreversible commands.
+               **Never execute the tool over untrusted input files.**
 
 ```bash
 lucio --help
@@ -173,41 +181,35 @@ lucio README.template.md - | less
 ```
 
 `-P` / `--pager` does the same without the pipe, sending the document to your
-`PAGER` when stdout is a terminal:
+`PAGER` when stdout is a terminal
+(but it is ignored when issued with redirection to file):
 
 ```bash
 lucio README.template.md - -P
 ```
 
-Off a terminal the option does nothing at all, so a redirected document is
-byte-identical whether or not it was asked for.
+An existing OUTPUT is never overwritten by accident, including when its path is derived:
+`lucio` refuses to overwrite files unless the `-O` / `--overwrite-files` option is specified.
+The check happens before the template is parsed, so a refusal costs nothing and executes no block.
 
-Everything `lucio` has to say goes to stderr, the rendered document being the
-only thing ever written to stdout.
+### Do-not-edit Comment
 
-An existing OUTPUT is never clobbered by accident, derived names included: `lucio`
-refuses to run unless `-O` / `--overwrite-files` is given. The check happens before
-the template is parsed, so a refusal costs nothing and executes no block.
-
-By default, the rendered document opens
-with a comment naming the template it came from, and a blank line,
+By default, the rendered document opens with a comment naming the template it came from,
 so that whoever finds the generated file knows what to edit instead:
 
 ```
 <!-- This file README.md has been rendered by CLI tool 'lucio'. Do not edit this file, but rather its template README.template.md . -->
-
 ```
 
-This behavior can be prevented by issuing option `-E` / `--omit-do-not-edit-comment`.
-
-Two timeouts bound a run: each block is given 60 seconds, and the run as a whole is
-given 300 seconds. Pass `-b` / `--block-timeout` and `-t` / `--total-timeout` to raise or
-lower either, or `-1` to disable it.
+This behavior can be prevented by issuing the `-E` / `--omit-do-not-edit-comment` option.
 
 ### Logging
 
-The messages of the tool go through the standard `logging` machinery, under the
-`lucio` logger, and come out on stderr stamped with the UTC time and their level:
+Logs and messages from `lucio` are printed to stderr,
+to avoid mixing them with the rendered document written to stdout.
+
+The messages of the tool go through the Python standard `logging` machinery,
+under the logger named `lucio`, and come out on stderr stamped with the UTC time and their level:
 
 ```
 [2026-08-11T10:14:52.310Z] [DEBU] Input file: "/home/user/lucio/README.template.md"
@@ -224,13 +226,17 @@ The messages of the tool go through the standard `logging` machinery, under the
 [2026-08-11T10:14:52.406Z] [INFO] Rendering "README.template.md" into "README.md"... done
 ```
 
-`INFO` and above are shown by default, which is the pair of lines above: one when the
-work starts, naming what is being written, and one when it succeeded. A run that fails
-shows the first without the second; failures themselves are reported as `ERRO`. `-v` lowers the bar to `DEBUG`, which opens
-the log with the settings of the run --- the resolved paths and every option that
-shapes what happens --- and then reports every block as it is performed: the command
-run and the code it exited with, or the file included. The levels are colored when
-stderr is a terminal, and `-D` / `--do-not-color` turns that off everywhere.
+Messages at log level `INFO` and above are shown by default.
+Use option `-v` / `--verbose` to show `DEBUG` messages.
+
+The messages are colored according to their level when stderr is a terminal,
+while option `-D` / `--do-not-color` turns coloration off.
+
+### Timeouts
+
+Two timeouts bound a run: each block is given 60 seconds, and the run as a whole is given 300 seconds.
+Pass `-b` / `--block-timeout` and `-t` / `--total-timeout` to raise or lower either,
+or the special value `-1` to disable it.
 
 ### Exit Codes
 
@@ -253,7 +259,7 @@ a pre-existing OUTPUT is left exactly as it was.
   a stream holding nothing but newlines counts as empty.
 - The output file ends with exactly one newline.
 - The do-not-edit comment and the blank line below it are the only bytes `lucio`
-  adds of its own; issuing `-E/--omit-do-not-edit-comment` removes them.
+  adds of its own; issuing `-E` / `--omit-do-not-edit-comment` removes them.
 - Everything else, whitespace included, is copied byte-for-byte.
 - A fence is emitted with as many backticks as needed to wrap the captured
   output, even if it contains fences of its own. A merged fence grows only
@@ -276,13 +282,9 @@ Anything else is ordinary Markdown:
 all pass through untouched, as does any trigger fence written inside a longer
 fence (that is how the examples in this file survive).
 
-What the block does is chosen by its `command` attribute: `execute`, the
-default, runs the body through bash, and `include` pastes a file named by
-`path`.
+### Bash Blocks (`bash lucio`)
 
-### `bash lucio`
-
-The body of the block is executed by bash, and the block is replaced by
+The body of the block is executed by Bash, and the block is replaced by
 its source fence and/or what the body printed:
 
 ````
@@ -303,8 +305,8 @@ hello
 Note that the info string is reduced to `bash` in the output,
 while the body and the closing fence are copied byte-for-byte.
 
-By default the captured output is merged into the source fence, right after
-the commands that produced it, the way a terminal transcript reads.
+By default the captured output is merged into the source fence,
+right after the commands that produced it, the way a terminal transcript reads.
 With `merge=false` it goes into a separate unlabeled fence instead,
 one blank line below the source:
 
@@ -318,60 +320,67 @@ hello
 ```
 ````
 
-Either way, stdout comes first and stderr after it, and if the selected
-streams are empty no output is emitted at all.
+Either way, stdout comes first and stderr after it,
+and if the selected streams are empty no output is emitted at all.
 
 #### Attributes
 
-| Key           | Values                                     | Default   | Meaning                                                                            |
-|---------------|--------------------------------------------|-----------|------------------------------------------------------------------------------------|
-| `command`     | `execute`, `include`                       | `execute` | what the block does                                                                |
-| `exit`        | `any`, or an integer between `0` and `255` | `0`       | the exit code the block must exit with                                             |
-| `merge`       | `true`, `false`                            | `true`    | put the captured output inside the source fence, rather than in a fence of its own |
-| `path`        | a file name                                | *(none)*  | the file `command=include` reads                                                   |
-| `show_source` | `true`, `false`                            | `true`    | emit the source block, as a plain ```` ```bash ```` fence                          |
-| `stderr`      | `true`, `false`                            | `true`    | include the captured stderr in the output                                          |
-| `stdout`      | `true`, `false`                            | `true`    | include the captured stdout in the output                                          |
+| Key           | Values                      | Default   | Applies To | Meaning                                                                            |
+|---------------|-----------------------------|-----------|------------|------------------------------------------------------------------------------------|
+| `command`     | `execute`, `include`        | `execute` |            | what the block does                                                                |
+| `exit`        | `any`, or int in `[0, 255]` | `0`       | `execute`  | the exit code the block must exit with (if not, `lucio` run fails)                 |
+| `merge`       | `true`, `false`             | `true`    | `execute`  | put the captured output inside the source fence, rather than in a fence of its own |
+| `path`        | a file path                 | N/A       | `include`  | the file `command=include` reads                                                   |
+| `show_source` | `true`, `false`             | `true`    | `execute`  | emit the source block, as a plain ```` ```bash ```` fence                          |
+| `stderr`      | `true`, `false`             | `true`    | `execute`  | include the captured stderr in the output                                          |
+| `stdout`      | `true`, `false`             | `true`    | `execute`  | include the captured stdout in the output                                          |
 
 Attributes are unquoted `key=value` tokens, separated by whitespace.
-Booleans are written `true` and `false`, lowercase like every other value,
-and nothing else will do: `True`, `TRUE`, `1`, and `"true"` are all errors,
-not silent falsehoods.
-An unknown key, a repeated key, a malformed token, or an unknown value
-is an error too.
+Booleans are written `true` and `false`, lowercase like every other value;
+attempting to use for instance `True`, `TRUE`, `1`, or `"true"` will produce an error.
+Specifying unknown keys, keys not supported by the given `command`,
+repeating a key, mispelled tokens or values will error out as well.
 
-Each command takes only the attributes it uses: `path` belongs to
-`command=include` and is required by it, while `exit`, `merge`, `show_source`,
-`stderr` and `stdout` belong to `command=execute`. Writing one where it has no
-meaning is an error rather than a silent no-op. A file name with a space in it
-cannot be written, since attributes are separated by whitespace and there is no
-quoting.
-
-`merge` has nothing to do when there is no source fence to merge into
-(`show_source=false`) or no output to merge (empty streams, or both
-`stdout=false` and `stderr=false`): in those cases it changes nothing.
+`merge` does nothing if `show_source=false` or there is no output to merge
+(e.g., empty stdout/stderr contents, or `stdout=false` and `stderr=false`).
 
 A block with `show_source=false stdout=false stderr=false` renders to nothing:
-it is a hidden setup block. Blank lines around it are collapsed, so it leaves
-no trace in the output. Every block runs in the working directory `lucio`
-was invoked from, so a hidden block can prepare files for the blocks below it:
+it is a hidden block that can be used to run "setup" commands
+(e.g., creating or removing files, etc.) before other trigger blocks are executed.
+
+Blank lines around hidden blocks are collapsed, so they leave no trace in the output.
+Every block runs in the working directory `lucio` was invoked from,
+so a hidden block can prepare files for the blocks below it:
 
 ````
 ```bash lucio show_source=false stdout=false stderr=false
 rm -f ./configuration.yaml
+echo "answer: 42" > ./myotherfile.yaml
 ```
 ````
 
-### `command=execute`
+As anticipated above, there are two types of Bash blocks,
+depending on the `command` attribute: `command=execute` blocks (default),
+and `command=include` blocks, described in the next subsections.
 
-Each block is executed in its own bash subprocess, with the body passed
-verbatim and nothing injected into it, so shell state (variables, `cd`,
-functions) does not carry over from one block to the next; the filesystem,
-of course, does.
+#### Bash Blocks With `command=execute`
 
-If a block exits with a code other than the expected one, the whole run is
-aborted and OUTPUT is not written. Expected failures must declared with
-`exit` to prevent that:
+````
+```bash lucio [command=execute] [exit=0] [show_source=true] [stdout=true] [stderr=true] [merge=true]
+# write any Bash command(s) to be executed as the block body
+echo "Hello World!"
+touch /tmp/myfile
+```
+````
+
+Each block is executed in its own Bash subprocess,
+with the body passed verbatim and nothing injected into it,
+so shell state (variables, `cd`, functions) does not carry over from one block to the next;
+the filesystem, of course, does.
+
+If a block exits with a code other than the expected one, the whole run is aborted
+and OUTPUT is not written.
+Expected failures must declared with `exit` to prevent that:
 
 ````
 ```bash lucio exit=1
@@ -379,40 +388,38 @@ cat missing_file.txt
 ```
 ````
 
-`exit=any` accepts whatever return code the block returns.
+Specify `exit=any` to accept whatever return code the block returns.
 
-A block that exits non-zero and is allowed to says so in the verbose log, naming the
-attribute that let it through, so a tolerated failure is never mistaken for an
-unnoticed one:
+The verbose log will show something similar to the following:
 
 ```
 [2026-08-11T10:14:52.402Z] [DEBU] README.template.md:12: exit code 1 (permitted by exit=1)
 [2026-08-11T10:14:53.118Z] [DEBU] README.template.md:24: exit code 3 (permitted by exit=any)
 ```
 
-### `command=include`
-
-The file named by `path` is pasted raw, as Markdown, in place of the block:
-no source fence, no output fence, and no bash involved. The block takes no
-body, and neither timeout applies, there being no process to bound.
+#### Bash Blocks With `command=include`
 
 ````
 ```bash lucio command=include path=CONFIGURATION_FILE.md
 ```
 ````
 
-A relative `path` is resolved against **the directory of the template**, so a
-template and the files it includes travel together and can be rendered from
-anywhere. Note that this differs from the bash blocks, which run in the working
-directory `lucio` was invoked from: in a template stored in `docs/`,
-`path=PART.md` means `docs/PART.md`, while a block's `cat PART.md` does not.
+The file named by `path` is pasted raw, as Markdown, in place of the block:
+no source fence, no output fence, and no Bash execution is involved.
+The block takes no attribute other than `path`, nor body.
+Timeouts do not apply, since no processing happens.
 
-The file is pasted as it is: a trigger fence inside it is text, not something
-`lucio` renders in turn. A file that cannot be read aborts the run, like any
-other failing block.
+A relative `path` is resolved against **the directory of the template**,
+so a template and the files it includes travel together and can be rendered from anywhere.
+Note that this differs from the Bash blocks, which run in the working
+directory `lucio` was invoked from.
 
-Including a file that `lucio` generated pastes its do-not-edit comment along
-with it, in the middle of the document and naming the wrong template.
+The file is pasted as it is: a trigger fence inside it is text,
+not something `lucio` renders in turn.
+A file that cannot be read aborts the run, like any other failing block.
+
+Including a file that `lucio` generated might paste its do-not-edit comment along with it,
+in the middle of the main document and even possibly naming the wrong template.
 Option `-R` / `--remove-do-not-edit-comment-on-include` drops that opening comment
 and the blank line below it, from every file included in the run:
 
@@ -432,10 +439,12 @@ Text.
 ```
 
 Only the first line is considered, and only when it is a comment `lucio` itself
-would have written: a licence header, a linter directive or another generator's
-banner is left where it is. Note that `-R` is about the file being read, while
-`-E` is about the file being written; a run can use either, both or neither.
+would have written: licence headers, linter directives, another generator's
+banners, etc. are left unchanged.
 
+Note that `-R` is about the file being read,
+while `-E` is about the file being written;
+a run of `lucio` can use either, both or neither.
 
 
 ## Development
