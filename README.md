@@ -415,11 +415,11 @@ rather than silently reading from the wrong place.
 
 The `style` attribute says how the file is wrapped:
 
-| Value      | Result                                                                |
+| Value      | Result                                                                 |
 |------------|------------------------------------------------------------------------|
-| `fence`    | the file inside a fence with no language                              |
+| `fence`    | the file inside a fence with no language                               |
 | `language` | the file inside a fence carrying the language of the trigger (default) |
-| `literal`  | the file pasted raw, as Markdown                                      |
+| `literal`  | the file pasted raw, as Markdown                                       |
 
 So, if `configuration.yaml` contains `answer: 42`, the block:
 
@@ -438,11 +438,9 @@ answer: 42
 
 while `style=fence` emits the same fence without the `yaml` label,
 and `style=literal` pastes `answer: 42` alone.
-The language is still the first token of the info string
-even when `style=literal` makes no use of it.
 The emitted fence grows as needed to clear any backtick run in the file,
-and it always sits at column 0.
-An empty file contributes nothing, whatever the style.
+and it always sits at the first column.
+An empty file contributes nothing, whatever the specified `style`.
 
 The file is never interpreted: a trigger fence inside it is text,
 not something `lucio` renders in turn.
