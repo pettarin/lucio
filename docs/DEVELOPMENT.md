@@ -52,9 +52,10 @@ make lint
 make check-type-hints
 ```
 
-The unit tests execute real `bash` subprocesses, with plain builtins only
+The unit tests execute real `bash`, `sh` and `zsh` subprocesses, with plain builtins only
 (`cat`, `echo`, `exit`, `printf`, `read`, `sleep`, `true`, `false`)
 and no network access.
+The cases of a shell that is not on `PATH` are skipped, so only `bash` is really needed.
 
 
 ## Generating The Documentation
@@ -72,6 +73,22 @@ but honors a narrower terminal, which would otherwise rewrap the usage section
 and produce a spurious diff.
 
 
+## Updating The Language Table
+
+`src/lucio/languages.py` holds the language names and aliases that
+`-L` / `--check-language` validates a fence against. They are a snapshot of the
+`SUPPORTED_LANGUAGES.md` document of highlight.js, refreshed with:
+
+```bash
+make update-languages
+```
+
+The target runs `res/update_languages.py`, which fetches that document, reads the
+table between its `<!-- LANGLIST -->` markers, and rewrites the `LANGUAGES` literal
+in place, reporting every alias added and removed. Nothing else in the file is
+touched, and the run is a no-op when upstream has not moved.
+
+
 ## Project Structure
 
 ```
@@ -83,14 +100,16 @@ lucio/
 │   ├── DEVELOPMENT.md            # this file
 │   └── SECURITY.md               # how to report a security vulnerability
 ├── res/
-│   └── copyright_header.txt      # header prepended to every source file
+│   ├── copyright_header.txt      # header prepended to every source file
+│   └── update_languages.py       # refreshes languages.py from highlight.js
 ├── src/
 │   └── lucio/
 │       ├── __init__.py           # public API re-exports and version
 │       ├── cli.py                # Click-based CLI, and the exit codes of the tool
 │       ├── console.py            # logging handler printing the timestamped messages
 │       ├── errors.py             # LucioError and its subclasses
-│       ├── executor.py           # bash subprocess execution and expected-exit policy
+│       ├── executor.py           # shell subprocess execution and expected-exit policy
+│       ├── languages.py          # language names and aliases known to highlight.js
 │       ├── model.py              # segments, block options, and execution results
 │       ├── parser.py             # template scanner: verbatim text vs trigger fences
 │       └── renderer.py           # rendering of the parsed segments into Markdown
@@ -100,6 +119,7 @@ lucio/
 │   ├── test_console.py
 │   ├── test_errors.py
 │   ├── test_executor.py
+│   ├── test_languages.py
 │   ├── test_parser.py
 │   └── test_renderer.py
 ├── LICENSE                       # full text of the license for this project

@@ -1,24 +1,14 @@
 """The language names a fence may carry, as known to highlight.js.
 
 Only ``--check-language`` consults this: a language is otherwise copied into the emitted
-fence and never interpreted. The list is a snapshot, taken on 2026-08-12 from
-
-    https://raw.githubusercontent.com/highlightjs/highlight.js/refs/heads/main/SUPPORTED_LANGUAGES.md
-
-and drifts as upstream adds languages. To refresh it, re-run over that file::
-
-    aliases = set()
-    for line in table.splitlines():
-        if not line.startswith("|") or line.startswith(("| :", "| Language")):
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) >= 2:
-            aliases.update(a.strip().lower() for a in cells[1].split(",") if a.strip())
+fence and never interpreted. The list is a snapshot of the SUPPORTED_LANGUAGES.md
+document of highlight.js, and drifts as upstream adds languages.
 
 :copyright: Copyright (C) 2026 Alberto Pettarin
 :license: GNU General Public License v3.0 (see the LICENSE file for details)
 """
 
+# Generated values: run "make update-languages" to refresh them from highlight.js
 LANGUAGES = frozenset(
     {
         "1c", "4d", "abap", "abc", "abnf", "accesslog", "actionscript", "ada", "adoc", "aiken",

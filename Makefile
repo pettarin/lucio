@@ -29,6 +29,7 @@
 	test-all \
 	test-unit \
 	uninstall-this \
+	update-languages \
 	upload-production-pypi \
 	upload-test-pypi
 
@@ -54,6 +55,7 @@ help:
 	@echo "  test-all                   - Run all checks (tests, linter, and type checker)"
 	@echo "  test-unit                  - Run tests"
 	@echo "  uninstall-this             - Uninstall the package"
+	@echo "  update-languages           - Update the language table from highlight.js"
 
 install-e-this:
 	pip install -e .
@@ -94,16 +96,21 @@ coverage-html:
 	pytest --cov-report=html
 
 lint:
-	ruff check src/ tests/
+	ruff check res/ src/ tests/
 
 check-type-hints:
-	mypy src/
+	mypy res/ src/
 
 # COLUMNS=80 ensures that lucio blocks are rendered at 80 columns
 # even when run from terminals with less columns;
 # click caps it at 80, so a larger value will not take effect
 generate-docs:
 	COLUMNS=80 lucio --overwrite-files README.template.md README.md
+
+# Rewrites the LANGUAGES table of src/lucio/languages.py
+# with the aliases the SUPPORTED_LANGUAGES.md document of highlight.js lists today
+update-languages:
+	python res/update_languages.py
 
 clean:
 	rm -rf build/
