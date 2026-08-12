@@ -281,10 +281,10 @@ as its second token are processed:
 ```
 ````
 
-A `command=execute` block, which is the default, is run by Bash,
-so its language must be `bash`;
-a `command=include` block may carry any language,
-which is used to fence the file it reads.
+A block that does not say otherwise is a `command=include` block,
+and it may carry any language, which is used to fence the file it reads.
+A block that is to be run by Bash must ask for it with `command=execute`,
+and its language must then be `bash`.
 The language is copied into the output and never interpreted,
 and it is not checked unless `-L` / `--check-language` is given,
 which validates it against the language names and aliases known to
@@ -298,8 +298,8 @@ fence (that is how the examples in this file survive).
 
 ### Trigger Blocks (`LANGUAGE lucio`)
 
-The body of the block is executed by Bash, and the block is replaced by
-its source fence and/or what the body printed:
+With `command=execute`, the body of the block is executed by Bash,
+and the block is replaced by its source fence and/or what the body printed:
 
 ````
 ```bash lucio command=execute
@@ -482,7 +482,7 @@ a run of `lucio` can use either, both or neither.
 **IMPORTANT**: currently only `LANGUAGE=bash` blocks support `command=execute`.
 
 ````
-```bash lucio [command=execute] [exit=0] [show_source=true] [stdout=true] [stderr=true] [merge=true]
+```bash lucio command=execute [exit=0] [show_source=true] [stdout=true] [stderr=true] [merge=true]
 # write any Bash command(s) to be executed as the block body
 echo "Hello World"
 touch /tmp/myfile
@@ -499,7 +499,7 @@ and OUTPUT is not written.
 Expected failures must declared with `exit` to prevent that:
 
 ````
-```bash lucio exit=1
+```bash lucio command=execute exit=1
 cat missing_file.txt
 ```
 ````

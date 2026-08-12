@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking**: `command=include` is now the default command, so a block to be run by
+  Bash has to say `command=execute`; a trigger that does not is an include, and fails
+  with `'command=include' requires 'path'` before anything is executed
 - **Breaking**: `command=include` now wraps the file in a fence labeled with the
   language of the trigger, rather than pasting it raw; the previous behavior is
   `style=literal`

@@ -28,7 +28,7 @@ class Style(enum.Enum):
 class BlockOptions:
     """The attributes of a trigger fence, resolved against their defaults."""
 
-    command: Command = Command.EXECUTE
+    command: Command = Command.INCLUDE
     expected_exit: int | None = 0
     """The exit code the block must exit with; None means "any exit code is fine"."""
     merge: bool = True

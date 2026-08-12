@@ -16,7 +16,7 @@ from lucio.errors import (
     IncludeError,
 )
 from lucio.executor import execute_block, include_file
-from lucio.model import BlockOptions, BlockSegment
+from lucio.model import BlockOptions, BlockSegment, Command
 
 SOURCE = "doc.template.md"
 
@@ -30,7 +30,7 @@ def make_block(body, expected_exit=0, line=1):
         indent="",
         language="bash",
         line=line,
-        options=BlockOptions(expected_exit=expected_exit),
+        options=BlockOptions(command=Command.EXECUTE, expected_exit=expected_exit),
     )
 
 

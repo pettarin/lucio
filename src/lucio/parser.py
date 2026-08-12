@@ -172,7 +172,7 @@ def _classify_info_string(info: str, fence_char: str, source: str, line: int) ->
 
 def _parse_attributes(attrs: list[str], source: str, line: int) -> BlockOptions:
     """Resolve the ``key=value`` tokens of a lucio trigger against their defaults."""
-    command = Command.EXECUTE
+    command = Command.INCLUDE
     expected_exit: int | None = 0
     merge = True
     path: Path | None = None

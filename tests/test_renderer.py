@@ -20,6 +20,7 @@ from lucio.renderer import fence_for, normalize_stream, render_block, render_doc
 def make_block(
     body="echo hi\n",
     close_line="```\n",
+    command=Command.EXECUTE,
     fence_length=3,
     indent="",
     language="bash",
@@ -34,7 +35,7 @@ def make_block(
         indent=indent,
         language=language,
         line=line,
-        options=BlockOptions(**options),
+        options=BlockOptions(command=command, **options),
     )
 
 
