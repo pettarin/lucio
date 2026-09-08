@@ -1,0 +1,26 @@
+rules:
+  - rule_id_1:
+    type: re
+    streams:
+      - stderr
+    target: foo
+    replacement: baz
+    count: first
+
+  - rule_id_2:
+    type: re
+    streams:
+      - stdout
+    target: foo
+    replacement: bar
+    count: all
+
+  - rule_id_3:
+    type: re
+    streams:
+      - stderr
+      - stdout
+    target: "ba([^z]*)"
+    replacement: bazbaz
+    count: all
+
