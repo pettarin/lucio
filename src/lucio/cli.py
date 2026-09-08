@@ -20,16 +20,19 @@ from lucio.errors import (
     ExecutionError,
     ExecutionTimeoutError,
     IncludeError,
+    RulesError,
     TemplateError,
     TotalTimeoutError,
 )
 from lucio.executor import execute_block, include_file
-from lucio.model import BlockSegment, Command, ExecutionResult
+from lucio.model import BlockSegment, Command, ExecutionResult, Rule, RuleHit
 from lucio.parser import parse_template
 from lucio.renderer import render_document
+from lucio.rules import apply_rules, find_rules_file, load_rules
 
 EDIT_COMMENT_RE = re.compile(r"^<!--.*has been rendered by CLI tool 'lucio'.*-->$")
 EXIT_EXECUTION_ERROR = 4
+EXIT_RULES_ERROR = 5
 EXIT_TEMPLATE_ERROR = 3
 EXIT_WRITE_ERROR = 1
 NO_TIMEOUT = -1.0
@@ -105,6 +108,13 @@ def _validate_timeout(
     help="Strip the do-not-edit comment from an included file.",
 )
 @click.option(
+    "-r",
+    "--rules-file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="YAML file of replacement rules; defaults to lucio.rules.yaml or "
+    ".lucio.rules.yaml in the working directory, if present.",
+)
+@click.option(
     "-t",
     "--total-timeout",
     type=float,
@@ -140,6 +150,7 @@ def main(
     overwrite_files: bool,
     pager: bool,
     remove_do_not_edit_comment_on_include: bool,
+    rules_file: Path | None,
     total_timeout: float | None,
     verbose: bool,
 ) -> None:
@@ -152,12 +163,18 @@ def main(
     The rendered document opens with a comment naming the template it came from,
     unless -E is given.
 
+    The replacement rules of -r, or of the rules file found in the working directory,
+    rewrite what every lucio block captures, in the order they are written.
+
     The template is rendered in memory and written out only once everything succeeded,
     so a failing block leaves OUTPUT untouched.
     """
     setup_console(color=not do_not_color, verbose=verbose)
     deadline = None if total_timeout is None else time.monotonic() + total_timeout
     destination = _resolve_output(input_file, output_file)
+    if rules_file is None:
+        # Relative to the working directory, so the messages name it as the user would
+        rules_file = find_rules_file(Path())
     _log_settings(
         input_file,
         destination,
@@ -167,6 +184,7 @@ def main(
         overwrite_files,
         pager,
         remove_do_not_edit_comment_on_include,
+        rules_file,
         total_timeout,
     )
     if destination is not None:
@@ -178,6 +196,7 @@ def main(
                 EXIT_WRITE_ERROR,
             )
 
+    rules = _load_rules(rules_file)
     source = str(input_file)
     rendering = (
         f'Rendering "{source}" on the standard output'
@@ -196,7 +215,7 @@ def main(
             result = include_file(included, source, block.line)
             if remove_do_not_edit_comment_on_include:
                 result = replace(result, stdout=_without_edit_comment(result.stdout))
-            return result
+            return rewrite(block, result)
 
         debug(f"{source}:{block.line}: executing {block.language} block")
         allowed = _remaining_timeout(block_timeout, deadline, source, block.line, total_timeout)
@@ -209,7 +228,13 @@ def main(
             raise
         permitted = _permitted_by(block, result.exit_code)
         debug(f"{source}:{block.line}: exit code {result.exit_code}{permitted}")
-        return result
+        return rewrite(block, result)
+
+    def rewrite(block: BlockSegment, result: ExecutionResult) -> ExecutionResult:
+        rewritten, hits = apply_rules(rules, result, block.options.command)
+        for hit in hits:
+            debug(f"{source}:{block.line}: {_hit_message(hit)}")
+        return rewritten
 
     try:
         segments = parse_template(text, source, check_language=check_language)
@@ -271,6 +296,24 @@ def _fail(message: str, code: int) -> NoReturn:
     raise SystemExit(code)
 
 
+def _hit_message(hit: RuleHit) -> str:
+    """Return the log line for a rule that rewrote a stream, without its location."""
+    matches = "match" if hit.substitutions == 1 else "matches"
+    return f"rule '{hit.identifier}' rewrote {hit.substitutions} {matches} on {hit.stream.value}"
+
+
+def _load_rules(rules_file: Path | None) -> list[Rule]:
+    """Load the rules file, if there is one, terminating the run on a malformed file."""
+    if rules_file is None:
+        return []
+    try:
+        rules = load_rules(rules_file)
+    except RulesError as exc:
+        _fail(str(exc), EXIT_RULES_ERROR)
+    debug(f'Loaded {len(rules)} rule(s) from "{rules_file}"')
+    return rules
+
+
 def _log_settings(
     input_file: Path,
     destination: Path | None,
@@ -280,6 +323,7 @@ def _log_settings(
     overwrite_files: bool,
     pager: bool,
     remove_do_not_edit_comment_on_include: bool,
+    rules_file: Path | None,
     total_timeout: float | None,
 ) -> None:
     """Log the settings of the run, one per line, before anything is read or executed."""
@@ -293,6 +337,10 @@ def _log_settings(
     debug(f"Overwrite files: {overwrite_files}")
     debug(f"Pager: {pager}")
     debug(f"Remove do-not-edit comment on include: {remove_do_not_edit_comment_on_include}")
+    if rules_file is None:
+        debug("Rules file: none")
+    else:
+        debug(f'Rules file: "{rules_file.resolve()}"')
     debug(_timeout_setting("Block timeout", block_timeout))
     debug(_timeout_setting("Total timeout", total_timeout))
 

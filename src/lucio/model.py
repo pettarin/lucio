@@ -5,6 +5,7 @@
 """
 
 import enum
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,25 @@ class Command(enum.Enum):
 
     EXECUTE = "execute"
     INCLUDE = "include"
+
+
+class Count(enum.Enum):
+    """How many matches a replacement rule rewrites, as spelled by its ``count`` field."""
+
+    ALL = "all"
+    FIRST = "first"
+
+
+class Stream(enum.Enum):
+    """A text a replacement rule may rewrite, as spelled in its ``streams`` field.
+
+    ``stdout`` and ``stderr`` are the streams an execute block captures; ``include`` is
+    the content of the file an include block reads.
+    """
+
+    INCLUDE = "include"
+    STDERR = "stderr"
+    STDOUT = "stdout"
 
 
 class Style(enum.Enum):
@@ -69,6 +89,28 @@ class ExecutionResult:
     exit_code: int
     stderr: str
     stdout: str
+
+
+@dataclass(frozen=True, slots=True)
+class Rule:
+    """One replacement rule of a rules file, its target already compiled."""
+
+    count: Count
+    identifier: str
+    """The key naming the rule in the file, unique within it."""
+    replacement: str
+    """The replacement text, with the backreferences :func:`re.sub` understands."""
+    streams: frozenset[Stream]
+    target: re.Pattern[str]
+
+
+@dataclass(frozen=True, slots=True)
+class RuleHit:
+    """One rule having rewritten one stream of one block, with how many matches it found."""
+
+    identifier: str
+    stream: Stream
+    substitutions: int
 
 
 @dataclass(frozen=True, slots=True)

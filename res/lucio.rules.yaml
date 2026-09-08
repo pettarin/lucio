@@ -20,7 +20,7 @@ rules:
     streams:
       - stderr
       - stdout
-    target: "ba([^z]*)"
+    target: "ba([^z\n]*)"
     replacement: bazbaz
     count: all
 
@@ -28,7 +28,7 @@ rules:
     type: re
     streams:
       - include
-    target: "ba([^z]*)"
+    target: "ba([^z\n]*)"
     replacement: bazbazbaz
     count: first
 

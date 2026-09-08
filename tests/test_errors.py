@@ -12,6 +12,7 @@ from lucio.errors import (
     ExitCodeMismatchError,
     IncludeError,
     LucioError,
+    RulesError,
     TemplateError,
     TemplateSyntaxError,
     TotalTimeoutError,
@@ -46,6 +47,10 @@ class TestHierarchy:
 
     def test_lucio_error_is_an_exception(self):
         assert issubclass(LucioError, Exception)
+
+    def test_rules_error_is_an_exception_of_its_own(self):
+        assert issubclass(RulesError, Exception)
+        assert not issubclass(RulesError, LucioError)
 
 
 class TestLucioError:
@@ -113,3 +118,14 @@ class TestExitCodeMismatchError:
     def test_details_are_kept(self):
         error = ExitCodeMismatchError("doc.template.md", 3, 0, 42, "boom\n")
         assert (error.expected, error.actual, error.stderr) == (0, 42, "boom\n")
+
+
+class TestRulesError:
+    def test_str_is_prefixed_with_the_path(self):
+        error = RulesError("lucio.rules.yaml", "rule 1: must be a mapping")
+        assert str(error) == "lucio.rules.yaml: rule 1: must be a mapping"
+
+    def test_attributes_are_kept(self):
+        error = RulesError("lucio.rules.yaml", "rule 1: must be a mapping")
+        assert error.path == "lucio.rules.yaml"
+        assert error.message == "rule 1: must be a mapping"

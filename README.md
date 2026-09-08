@@ -47,6 +47,8 @@ for the human user to manually author and maintain.
 - Support fo "hidden" setup blocks to run commands
   but that must be omitted from the rendered document
 - File inclusion by path relative to the template, raw or fenced in any language
+- Replacement rules, regular expressions read from a YAML file and applied in order
+  to the captured stdout, the captured stderr, or the included files
 - Check on exit codes, allowing for documenting expected failing behavior
   while still catching unexpected errors via tool failure
 - Syntax errors surface before any block is executed
@@ -130,6 +132,10 @@ Usage: lucio [OPTIONS] INPUT [OUTPUT]
   The rendered document opens with a comment naming the template it came from,
   unless -E is given.
 
+  The replacement rules of -r, or of the rules file found in the working
+  directory, rewrite what every lucio block captures, in the order they are
+  written.
+
   The template is rendered in memory and written out only once everything
   succeeded, so a failing block leaves OUTPUT untouched.
 
@@ -147,6 +153,9 @@ Options:
   -R, --remove-do-not-edit-comment-on-include
                                   Strip the do-not-edit comment from an
                                   included file.
+  -r, --rules-file FILE           YAML file of replacement rules; defaults to
+                                  lucio.rules.yaml or .lucio.rules.yaml in the
+                                  working directory, if present.
   -t, --total-timeout FLOAT       Timeout for the whole run, in seconds; -1
                                   for no timeout.  [default: 300.0]
   -v, --verbose                   Log each executed block and its exit code to
@@ -221,11 +230,14 @@ under the logger named `lucio`, and come out on stderr stamped with the UTC time
 [2026-08-11T10:14:52.311Z] [DEBU] Overwrite files: True
 [2026-08-11T10:14:52.311Z] [DEBU] Pager: False
 [2026-08-11T10:14:52.311Z] [DEBU] Remove do-not-edit comment on include: False
+[2026-08-11T10:14:52.311Z] [DEBU] Rules file: "/home/user/lucio/lucio.rules.yaml"
 [2026-08-11T10:14:52.311Z] [DEBU] Block timeout: 60.0 seconds
 [2026-08-11T10:14:52.311Z] [DEBU] Total timeout: 300.0 seconds
+[2026-08-11T10:14:52.312Z] [DEBU] Loaded 1 rule(s) from "lucio.rules.yaml"
 [2026-08-11T10:14:52.312Z] [INFO] Rendering "README.template.md" into "README.md"...
 [2026-08-11T10:14:52.318Z] [DEBU] README.template.md:12: executing bash block
 [2026-08-11T10:14:52.402Z] [DEBU] README.template.md:12: exit code 0
+[2026-08-11T10:14:52.402Z] [DEBU] README.template.md:12: rule 'mask_home' rewrote 2 matches on stdout
 [2026-08-11T10:14:52.404Z] [DEBU] README.template.md:24: including "PART.md"
 [2026-08-11T10:14:52.406Z] [INFO] Rendering "README.template.md" into "README.md"... done
 ```
@@ -242,6 +254,83 @@ Two timeouts bound a run: each block is given 60 seconds, and the run as a whole
 Pass `-b` / `--block-timeout` and `-t` / `--total-timeout` to raise or lower either,
 or the special value `-1` to disable it.
 
+### Replacement Rules
+
+A rules file lets you rewrite what the blocks capture before it lands in the document,
+for example to mask a home directory, a timestamp, or a version number that would
+otherwise change the rendered file at every run.
+
+The file is YAML, named either with `-r` / `--rules-file`, or implicitly:
+without the option, `lucio` looks for `lucio.rules.yaml` and then `.lucio.rules.yaml`
+in the working directory (not next to the template), and uses the first one it finds.
+Here is the example shipped in the repository as `res/lucio.rules.yaml`:
+
+```yaml
+rules:
+  - id: rule_1
+    type: re
+    streams:
+      - stderr
+    target: foo
+    replacement: baz
+    count: first
+
+  - id: rule_2
+    type: re
+    streams:
+      - stdout
+    target: foo
+    replacement: bar
+    count: all
+
+  - id: rule_3
+    type: re
+    streams:
+      - stderr
+      - stdout
+    target: "ba([^z\n]*)"
+    replacement: bazbaz
+    count: all
+
+  - id: rule_4
+    type: re
+    streams:
+      - include
+    target: "ba([^z\n]*)"
+    replacement: bazbazbaz
+    count: first
+```
+
+The file holds a single key, `rules`, listing the rules, each with all of these fields:
+
+| Field         | Value                                                                    |
+|---------------|--------------------------------------------------------------------------|
+| `id`          | a string naming the rule, unique within the file                         |
+| `type`        | `re`, the only type for now: `target` is a regular expression            |
+| `streams`     | a non-empty list drawn from `stdout`, `stderr`, and `include`            |
+| `target`      | the Python regular expression to look for                                |
+| `replacement` | the replacement text, where `\1` and `\g<name>` refer to `target` groups |
+| `count`       | `first` to rewrite the first match only, `all` to rewrite every match    |
+
+The rules apply to every `lucio` block, in the order they are written: each rule sees the
+text as the previous one left it. `stdout` and `stderr` are the streams captured by a
+`command=execute` block, while `include` is the content of the file read by a
+`command=include` block, so a rule for `stdout` never touches an included file and vice versa.
+The regular expression is matched against the whole captured text at once, newlines included,
+before the text is normalized and fenced, and before `stdout` or `stderr` are hidden by
+the attributes of the block. So `^` and `$` anchor the whole text, not a line of it,
+unless the expression opts into multiline mode with `(?m)`,
+and `.` stops at a newline as usual.
+A rule rewrites what the document shows only: the exit code
+check still sees the stderr the block really produced.
+
+With `-v` / `--verbose`, every rule that found something is logged at `DEBUG` level,
+beside the block it rewrote, with the number of matches it replaced and the stream;
+a rule that found nothing is not mentioned.
+
+The whole file is validated, backreferences included, before any block is executed,
+and a malformed file terminates the run with exit code `5`.
+
 ### Exit Codes
 
 | Code | Meaning                                                                         |
@@ -251,6 +340,7 @@ or the special value `-1` to disable it.
 | `2`  | usage error (missing or bad arguments, INPUT and OUTPUT are the same file)      |
 | `3`  | template error: syntax error, or INPUT cannot be read or decoded                |
 | `4`  | execution error: unexpected exit code, timed-out block, shell not runnable      |
+| `5`  | rules error: the rules file cannot be read, or one of its rules is malformed    |
 
 On any error other than `0`, OUTPUT is never opened and stdout stays empty:
 a pre-existing OUTPUT is left exactly as it was.

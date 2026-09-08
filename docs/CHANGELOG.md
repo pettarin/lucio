@@ -10,7 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Support for replacement rules
+- Replacement rules: a YAML file, named with `-r` / `--rules-file` or found in the
+  working directory as `lucio.rules.yaml` or `.lucio.rules.yaml`, lists regular
+  expressions that rewrite, in order, the captured `stdout`, the captured `stderr`, or
+  the content of an `include` block; see `res/lucio.rules.yaml` for the syntax
+- Exit code `5` for a rules file that cannot be read or holds a malformed rule
+- With `-v`, every rule that rewrote a block is logged with its match count and stream
+- `pyyaml` becomes a runtime dependency
 
 
 ## [0.0.8] - 2026-08-12

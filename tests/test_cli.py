@@ -42,6 +42,7 @@ def settings(
     overwrite=False,
     pager=False,
     remove=False,
+    rules="none",
     total="300.0 seconds",
 ):
     """Return the settings lines that -v prints before anything is executed.
@@ -57,6 +58,7 @@ def settings(
         f"[DEBU] Overwrite files: {overwrite}\n"
         f"[DEBU] Pager: {pager}\n"
         f"[DEBU] Remove do-not-edit comment on include: {remove}\n"
+        f"[DEBU] Rules file: {rules}\n"
         f"[DEBU] Block timeout: {block}\n"
         f"[DEBU] Total timeout: {total}\n"
     )
@@ -111,6 +113,7 @@ class TestOptions:
         assert "-P, --pager" in unwrapped
         assert "-R, --remove-do-not-edit-comment-on-include" in unwrapped
         assert "-b, --block-timeout FLOAT" in unwrapped
+        assert "-r, --rules-file FILE" in unwrapped
         assert "-1 for no timeout. [default: 60.0]" in unwrapped
         assert "-t, --total-timeout FLOAT" in unwrapped
         assert "-1 for no timeout. [default: 300.0]" in unwrapped
@@ -1172,6 +1175,198 @@ class TestRemoveEditCommentOnInclude:
         result, _ = render(workspace, ECHO_HI, "-v", "-R")
         assert result.exit_code == 0
         assert "[DEBU] Remove do-not-edit comment on include: True\n" in unstamped(result.stderr)
+
+
+class TestRules:
+    RULES = "lucio.rules.yaml"
+    DOTTED = ".lucio.rules.yaml"
+    TEMPLATE = "```bash lucio command=execute\necho foo; echo foo >&2\n```\n"
+    RAW = "```bash\necho foo; echo foo >&2\nfoo\nfoo\n```\n"
+
+    @staticmethod
+    def rules(target="foo", replacement="bar", streams="[stdout]", count="all"):
+        return (
+            "rules:\n"
+            "  - id: r\n"
+            "    type: re\n"
+            f"    streams: {streams}\n"
+            f"    target: {target}\n"
+            f"    replacement: {replacement}\n"
+            f"    count: {count}\n"
+        )
+
+    def test_no_rules_file_means_no_rewriting(self, workspace):
+        result, output = render(workspace, self.TEMPLATE, "-v")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == self.RAW
+        assert "[DEBU] Rules file: none\n" in unstamped(result.stderr)
+
+    @pytest.mark.parametrize("option", ["-r", "--rules-file"])
+    def test_the_option_names_the_file(self, workspace, option):
+        (workspace / "custom.yaml").write_text(self.rules(), encoding="utf-8")
+        result, output = render(workspace, self.TEMPLATE, "-v", option, "custom.yaml")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == self.RAW.replace("\nfoo\nfoo", "\nbar\nfoo")
+        stderr = unstamped(result.stderr)
+        assert f'[DEBU] Rules file: "{(workspace / "custom.yaml").resolve()}"\n' in stderr
+        assert '[DEBU] Loaded 1 rule(s) from "custom.yaml"\n' in stderr
+
+    @pytest.mark.parametrize("name", [RULES, DOTTED])
+    def test_a_conventional_name_in_the_working_directory_is_picked_up(self, workspace, name):
+        (workspace / name).write_text(self.rules(streams="[stderr]"), encoding="utf-8")
+        result, output = render(workspace, self.TEMPLATE, "-v")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == self.RAW.replace("\nfoo\nfoo", "\nfoo\nbar")
+        assert f'[DEBU] Rules file: "{(workspace / name).resolve()}"\n' in unstamped(result.stderr)
+
+    def test_the_undotted_name_wins_over_the_dotted_one(self, workspace):
+        (workspace / self.RULES).write_text(self.rules(replacement="plain"), encoding="utf-8")
+        (workspace / self.DOTTED).write_text(self.rules(replacement="dotted"), encoding="utf-8")
+        result, output = render(workspace, self.TEMPLATE)
+        assert result.exit_code == 0
+        assert "\nplain\n" in output.read_text(encoding="utf-8")
+
+    def test_the_option_wins_over_the_working_directory(self, workspace):
+        (workspace / self.RULES).write_text(self.rules(replacement="found"), encoding="utf-8")
+        (workspace / "custom.yaml").write_text(self.rules(replacement="named"), encoding="utf-8")
+        result, output = render(workspace, self.TEMPLATE, "-r", "custom.yaml")
+        assert result.exit_code == 0
+        assert "\nnamed\n" in output.read_text(encoding="utf-8")
+
+    def test_the_file_is_looked_up_in_the_working_directory_not_beside_the_template(
+        self, workspace
+    ):
+        (workspace / "docs").mkdir()
+        (workspace / "docs" / self.RULES).write_text(self.rules(), encoding="utf-8")
+        (workspace / "docs" / INPUT).write_text(self.TEMPLATE, encoding="utf-8")
+        assert run("-E", f"docs/{INPUT}", OUTPUT).exit_code == 0
+        assert (workspace / OUTPUT).read_text(encoding="utf-8") == self.RAW
+
+    def test_a_nonexistent_option_path_is_a_usage_error(self, workspace):
+        (workspace / INPUT).write_text(self.TEMPLATE, encoding="utf-8")
+        result = run("-r", "missing.yaml", INPUT, OUTPUT)
+        assert result.exit_code == 2
+        assert "missing.yaml" in result.stderr
+        assert not (workspace / OUTPUT).exists()
+
+    def test_a_malformed_file_exits_five_before_any_block_runs(self, workspace):
+        (workspace / self.RULES).write_text(self.rules(count="twice"), encoding="utf-8")
+        template = "```bash lucio command=execute\ntouch ran\n```\n"
+        result, output = render(workspace, template, "-v")
+        assert result.exit_code == 5
+        assert unstamped(result.stderr).endswith(
+            f"[ERRO] {self.RULES}: rule 1 ('r'): 'count' must be one of 'all', 'first', "
+            "got 'twice'\n"
+        )
+        assert not output.exists()
+        assert not (workspace / "ran").exists()
+
+    def test_a_malformed_file_prints_nothing_on_stdout(self, workspace):
+        (workspace / self.RULES).write_text("rules: [1]\n", encoding="utf-8")
+        (workspace / INPUT).write_text(self.TEMPLATE, encoding="utf-8")
+        result = run(INPUT, STDOUT)
+        assert result.exit_code == 5
+        assert result.stdout == ""
+
+    def test_an_invalid_replacement_exits_five_and_writes_nothing(self, workspace):
+        (workspace / self.RULES).write_text(
+            self.rules(target='"(f)oo"', replacement='"\\\\2"'), encoding="utf-8"
+        )
+        result, output = render(workspace, self.TEMPLATE)
+        assert result.exit_code == 5
+        assert unstamped(result.stderr) == (
+            f"[ERRO] {self.RULES}: rule 1 ('r'): 'replacement' is not valid: "
+            "invalid group reference 2 at position 1\n"
+        )
+        assert not output.exists()
+
+    def test_every_hit_is_logged_at_debug_level_beside_the_block(self, workspace):
+        (workspace / self.RULES).write_text(
+            self.rules(target="o", replacement='"0"', streams="[stdout, stderr]")
+            + "  - id: none\n    type: re\n    streams: [stdout]\n"
+            "    target: zzz\n    replacement: y\n    count: all\n"
+            + "  - id: once\n    type: re\n    streams: [stderr]\n"
+            "    target: f\n    replacement: F\n    count: first\n",
+            encoding="utf-8",
+        )
+        template = f"# Title\n\n{self.TEMPLATE}"
+        result, output = render(workspace, template, "-v")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == (
+            "# Title\n\n```bash\necho foo; echo foo >&2\nf00\nF00\n```\n"
+        )
+        stderr = unstamped(result.stderr)
+        assert stderr.count("rule '") == 3
+        assert (
+            f"[DEBU] {INPUT}:3: exit code 0\n"
+            f"[DEBU] {INPUT}:3: rule 'r' rewrote 2 matches on stdout\n"
+            f"[DEBU] {INPUT}:3: rule 'r' rewrote 2 matches on stderr\n"
+            f"[DEBU] {INPUT}:3: rule 'once' rewrote 1 match on stderr\n"
+        ) in stderr
+
+    def test_an_include_hit_is_logged_too(self, workspace):
+        (workspace / "part.md").write_text("foo\n", encoding="utf-8")
+        (workspace / self.RULES).write_text(self.rules(streams="[include]"), encoding="utf-8")
+        template = "```md lucio command=include path=part.md style=literal\n```\n"
+        result, output = render(workspace, template, "-v")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == "bar\n"
+        assert f"[DEBU] {INPUT}:1: rule 'r' rewrote 1 match on include\n" in unstamped(
+            result.stderr
+        )
+
+    def test_nothing_is_logged_for_a_rule_that_finds_nothing(self, workspace):
+        (workspace / self.RULES).write_text(self.rules(target="zzz"), encoding="utf-8")
+        result, _ = render(workspace, self.TEMPLATE, "-v")
+        assert result.exit_code == 0
+        assert "rule '" not in result.stderr
+
+    def test_the_rules_rewrite_the_merged_fence_only(self, workspace):
+        (workspace / self.RULES).write_text(self.rules("echo", "sh"), encoding="utf-8")
+        result, output = render(workspace, "echo foo\n\n" + self.TEMPLATE)
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == f"echo foo\n\n{self.RAW}"
+
+    def test_the_rules_apply_before_the_streams_are_normalized(self, workspace):
+        (workspace / self.RULES).write_text(self.rules('"foo\\\\n"', '""'), encoding="utf-8")
+        result, output = render(workspace, "```bash lucio command=execute\necho foo\n```\n")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == "```bash\necho foo\n```\n"
+
+    def test_the_exit_code_check_sees_the_raw_stderr(self, workspace):
+        (workspace / self.RULES).write_text(self.rules("foo", "bar", "[stderr]"), encoding="utf-8")
+        template = "```bash lucio command=execute\necho foo >&2; exit 1\n```\n"
+        result, output = render(workspace, template)
+        assert result.exit_code == 4
+        assert "captured stderr:\nfoo\n" in result.stderr
+        assert not output.exists()
+
+    def test_include_content_follows_the_include_stream(self, workspace):
+        (workspace / "part.md").write_text("foo\n", encoding="utf-8")
+        (workspace / self.RULES).write_text(
+            self.rules(streams="[stdout]") + "  - id: i\n    type: re\n    streams: [include]\n"
+            "    target: foo\n    replacement: inc\n    count: all\n",
+            encoding="utf-8",
+        )
+        template = "```md lucio command=include path=part.md style=literal\n```\n"
+        result, output = render(workspace, template)
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == "inc\n"
+
+    def test_the_include_rules_see_the_file_without_its_edit_comment(self, workspace):
+        (workspace / "part.md").write_text(
+            "<!-- This file part.md has been rendered by CLI tool 'lucio'. "
+            "Do not edit this file, but rather its template part.tmd . -->\n\nfoo\n",
+            encoding="utf-8",
+        )
+        (workspace / self.RULES).write_text(
+            self.rules(target='"\\\\A"', replacement='"start:"', streams="[include]"),
+            encoding="utf-8",
+        )
+        template = "```md lucio command=include path=part.md style=literal\n```\n"
+        result, output = render(workspace, template, "-R")
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == "start:foo\n"
 
 
 class TestTotalTimeout:
