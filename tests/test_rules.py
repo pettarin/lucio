@@ -112,11 +112,14 @@ class TestFindRulesFile:
 class TestLoadRules:
     def test_the_shipped_example_loads_in_file_order(self):
         rules = load_rules(EXAMPLE)
-        assert [r.identifier for r in rules] == ["rule_1", "rule_2", "rule_3", "rule_4"]
+        assert [r.identifier for r in rules] == ["rule_1", "rule_2", "rule_3", "rule_4", "rule_5"]
         assert rules[0] == rule("foo", "baz", ["stderr"], "first", "rule_1", "multiline", "ignore")
         assert rules[1] == rule("foo", "bar", ["stdout"], "all", "rule_2", "multiline")
+        assert rules[2].replacement == r"baz \1 baz"
         assert rules[2].streams == frozenset({Stream.STDERR, Stream.STDOUT})
         assert rules[3] == rule("ba([^z]*)", "bazbazbaz", ["include"], "first", "rule_4")
+        streams = ["include", "stderr", "stdout"]
+        assert rules[4] == rule("foobarbaz", "foofoofoo", streams, identifier="rule_5", kind="str")
 
     def test_an_empty_list_holds_no_rules(self, tmp_path):
         assert load(tmp_path, "rules: []\n") == []
@@ -286,9 +289,24 @@ class TestApplyRules:
 
     def test_the_shipped_example_on_the_streams(self):
         result = self.apply(load_rules(EXAMPLE), stdout="foo bar\n", stderr="foo\n")
-        # On stdout the third rule runs from the first "ba" to the end, newline included;
-        # on stderr "baz" offers no "ba" followed by non-z characters up to a line end
-        assert (result.stdout, result.stderr) == ("bazbaz", "baz\n")
+        # On stdout the third rule captures from after the first "ba" to the end, newline
+        # included, and wraps it; on stderr "baz" offers no "ba" followed by non-z
+        # characters up to a line end
+        assert (result.stdout, result.stderr) == ("baz r bar\n baz", "baz\n")
+
+    def test_the_shipped_example_on_the_fifth_rule(self):
+        rules = load_rules(EXAMPLE)
+        result = self.apply(rules, stdout="foobarbaz bar\n", command=Command.INCLUDE)
+        # The fourth rule runs first, up to the "z"; the fifth then finds nothing
+        assert result.stdout == "foobazbazbazz bar\n"
+        result = self.apply(rules, stdout="foobarbaz\n", command=Command.INCLUDE)
+        assert result.stdout == "foobazbazbazz\n"
+        # On the captured streams the earlier rules consume the target of the fifth
+        # first, which is what applying the rules in file order means
+        result = self.apply(rules, stdout="x foobarbaz\n", stderr="foobarbaz\n")
+        assert (result.stdout, result.stderr) == ("x barbarbaz\n", "bazbarbaz\n")
+        result = self.apply([rules[4]], stdout="x foobarbaz\n", stderr="foobarbaz\n")
+        assert (result.stdout, result.stderr) == ("x foofoofoo\n", "foofoofoo\n")
 
     def test_backreferences_work_in_the_replacement(self):
         result = self.apply([rule(r"(\w+)=(\w+)", r"\2=\1")], stdout="a=b\n")

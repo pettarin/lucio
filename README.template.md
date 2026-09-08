@@ -246,6 +246,8 @@ the attributes of the block. So, in `default` mode, `^` and `$` anchor the whole
 not a line of it; `multiline` mode makes them match at every line boundary instead,
 which is what a rule masking one line of a longer output usually wants.
 In either mode `.` stops at a newline, as usual.
+Mind the YAML quoting of a backreference: inside double quotes YAML reads `\1` as an
+escape sequence and rejects it, so write it in single quotes, as `'\1'`, or unquoted.
 A `str` rule looks for its `target` as written, metacharacters included, and pastes its
 `replacement` as written, so neither needs escaping; `count`, `mode`, and `case` apply to
 it all the same.

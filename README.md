@@ -267,6 +267,8 @@ Here is the example shipped in the repository as `res/lucio.rules.yaml`:
 
 ```yaml
 rules:
+  # On the captured stderr only, replace the first "foo", spelled in any
+  # combination of upper and lower case, with "baz"
   - id: rule_1
     type: re
     streams:
@@ -277,6 +279,8 @@ rules:
     mode: multiline
     case: ignore
 
+  # On the captured stdout only, replace every "foo", exactly in lower case,
+  # with "bar"
   - id: rule_2
     type: re
     streams:
@@ -287,17 +291,27 @@ rules:
     mode: multiline
     case: respect
 
+  # On both captured streams, replace every "ba" followed by any run of
+  # characters other than "z" up to the end of a line with that run
+  # wrapped in "baz " and " baz": the run is captured by the group and
+  # pasted back by the "\1" backreference, which needs single quotes,
+  # since inside double quotes YAML would read "\1" as an escape;
+  # in multiline mode the "$" anchor matches at the end of each line,
+  # so the run may span lines but must stop at the end of one
   - id: rule_3
     type: re
     streams:
       - stderr
       - stdout
     target: "ba([^z]*)$"
-    replacement: bazbaz
+    replacement: 'baz \1 baz'
     count: all
     mode: multiline
     case: respect
 
+  # On the content of included files only, replace the first "ba" and the
+  # run of characters other than "z" after it with "bazbazbaz"; the group
+  # is captured but not used by the replacement
   - id: rule_4
     type: re
     streams:
@@ -305,6 +319,21 @@ rules:
     target: "ba([^z]*)"
     replacement: bazbazbaz
     count: first
+    mode: default
+    case: respect
+
+  # On every stream, replace every "foobarbaz" with "foofoofoo": a str rule
+  # looks for its target as written, so no character needs escaping and no
+  # backreference is available, but count, mode, and case apply all the same
+  - id: rule_5
+    type: str
+    streams:
+      - include
+      - stderr
+      - stdout
+    target: foobarbaz
+    replacement: foofoofoo
+    count: all
     mode: default
     case: respect
 ```
@@ -332,6 +361,8 @@ the attributes of the block. So, in `default` mode, `^` and `$` anchor the whole
 not a line of it; `multiline` mode makes them match at every line boundary instead,
 which is what a rule masking one line of a longer output usually wants.
 In either mode `.` stops at a newline, as usual.
+Mind the YAML quoting of a backreference: inside double quotes YAML reads `\1` as an
+escape sequence and rejects it, so write it in single quotes, as `'\1'`, or unquoted.
 A `str` rule looks for its `target` as written, metacharacters included, and pastes its
 `replacement` as written, so neither needs escaping; `count`, `mode`, and `case` apply to
 it all the same.
