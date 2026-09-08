@@ -106,7 +106,7 @@ You should be able to run:
 
 ```bash
 lucio --version
-lucio, version 0.0.8
+lucio, version 0.0.9
 ```
 
 (dropping the `(lucio_env) $` prefix in the examples from now on).
