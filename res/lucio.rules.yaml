@@ -1,5 +1,5 @@
 rules:
-  - rule_id_1:
+  - id: rule_1
     type: re
     streams:
       - stderr
@@ -7,7 +7,7 @@ rules:
     replacement: baz
     count: first
 
-  - rule_id_2:
+  - id: rule_2
     type: re
     streams:
       - stdout
@@ -15,7 +15,7 @@ rules:
     replacement: bar
     count: all
 
-  - rule_id_3:
+  - id: rule_3
     type: re
     streams:
       - stderr
@@ -23,4 +23,12 @@ rules:
     target: "ba([^z]*)"
     replacement: bazbaz
     count: all
+
+  - id: rule_4
+    type: re
+    streams:
+      - include
+    target: "ba([^z]*)"
+    replacement: bazbazbaz
+    count: first
 
