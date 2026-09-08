@@ -1184,15 +1184,25 @@ class TestRules:
     RAW = "```bash\necho foo; echo foo >&2\nfoo\nfoo\n```\n"
 
     @staticmethod
-    def rules(target="foo", replacement="bar", streams="[stdout]", count="all"):
+    def rules(
+        target="foo",
+        replacement="bar",
+        streams="[stdout]",
+        count="all",
+        mode="default",
+        case="respect",
+        kind="re",
+    ):
         return (
             "rules:\n"
             "  - id: r\n"
-            "    type: re\n"
+            f"    type: {kind}\n"
             f"    streams: {streams}\n"
             f"    target: {target}\n"
             f"    replacement: {replacement}\n"
             f"    count: {count}\n"
+            f"    mode: {mode}\n"
+            f"    case: {case}\n"
         )
 
     def test_no_rules_file_means_no_rewriting(self, workspace):
@@ -1284,9 +1294,11 @@ class TestRules:
         (workspace / self.RULES).write_text(
             self.rules(target="o", replacement='"0"', streams="[stdout, stderr]")
             + "  - id: none\n    type: re\n    streams: [stdout]\n"
-            "    target: zzz\n    replacement: y\n    count: all\n"
+            "    target: zzz\n    replacement: y\n    count: all\n    mode: default\n"
+            "    case: respect\n"
             + "  - id: once\n    type: re\n    streams: [stderr]\n"
-            "    target: f\n    replacement: F\n    count: first\n",
+            "    target: f\n    replacement: F\n    count: first\n    mode: default\n"
+            "    case: respect\n",
             encoding="utf-8",
         )
         template = f"# Title\n\n{self.TEMPLATE}"
@@ -1321,6 +1333,29 @@ class TestRules:
         assert result.exit_code == 0
         assert "rule '" not in result.stderr
 
+    def test_multiline_mode_anchors_each_line_of_the_output(self, workspace):
+        (workspace / self.RULES).write_text(
+            # The lookahead keeps ^ off the empty line after the final newline
+            self.rules(target='"^(?=.)"', replacement='"> "', mode="multiline"),
+            encoding="utf-8",
+        )
+        template = "```bash lucio command=execute\nprintf 'a\\nb\\n'\n```\n"
+        result, output = render(workspace, template)
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == "```bash\nprintf 'a\\nb\\n'\n> a\n> b\n```\n"
+
+    def test_a_str_rule_ignoring_the_case_rewrites_the_output(self, workspace):
+        (workspace / self.RULES).write_text(
+            self.rules(target='"$HOME"', replacement='"~"', case="ignore", kind="str"),
+            encoding="utf-8",
+        )
+        template = "```bash lucio command=execute\necho '$HOME $home ${HOME}'\n```\n"
+        result, output = render(workspace, template)
+        assert result.exit_code == 0
+        assert output.read_text(encoding="utf-8") == (
+            "```bash\necho '$HOME $home ${HOME}'\n~ ~ ${HOME}\n```\n"
+        )
+
     def test_the_rules_rewrite_the_merged_fence_only(self, workspace):
         (workspace / self.RULES).write_text(self.rules("echo", "sh"), encoding="utf-8")
         result, output = render(workspace, "echo foo\n\n" + self.TEMPLATE)
@@ -1345,7 +1380,8 @@ class TestRules:
         (workspace / "part.md").write_text("foo\n", encoding="utf-8")
         (workspace / self.RULES).write_text(
             self.rules(streams="[stdout]") + "  - id: i\n    type: re\n    streams: [include]\n"
-            "    target: foo\n    replacement: inc\n    count: all\n",
+            "    target: foo\n    replacement: inc\n    count: all\n    mode: default\n"
+            "    case: respect\n",
             encoding="utf-8",
         )
         template = "```md lucio command=include path=part.md style=literal\n```\n"

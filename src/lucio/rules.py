@@ -11,17 +11,35 @@ from pathlib import Path
 import yaml
 
 from lucio.errors import RulesError
-from lucio.model import Command, Count, ExecutionResult, Rule, RuleHit, Stream
+from lucio.model import (
+    Case,
+    Command,
+    Count,
+    ExecutionResult,
+    Mode,
+    Rule,
+    RuleHit,
+    RuleType,
+    Stream,
+)
 
+CASE_VALUES = {case.value: case for case in Case}
 COUNT_VALUES = {count.value: count for count in Count}
-FIELD_KEYS = frozenset({"count", "id", "replacement", "streams", "target", "type"})
+FIELD_KEYS = frozenset(
+    {"case", "count", "id", "mode", "replacement", "streams", "target", "type"}
+)
 """The fields of a rule, all required."""
-RULE_TYPES = frozenset({"re"})
+MODE_VALUES = {mode.value: mode for mode in Mode}
 RULES_FILE_NAMES = ("lucio.rules.yaml", ".lucio.rules.yaml")
 """The names a rules file is looked up by in the working directory, in order of precedence."""
 STREAM_VALUES = {stream.value: stream for stream in Stream}
 TOP_KEY = "rules"
+TYPE_VALUES = {kind.value: kind for kind in RuleType}
 
+_CASE_FLAGS = {Case.IGNORE: re.IGNORECASE, Case.RESPECT: re.NOFLAG}
+"""The flag the target is compiled with for each case."""
+_MODE_FLAGS = {Mode.DEFAULT: re.NOFLAG, Mode.MULTILINE: re.MULTILINE}
+"""The flag the target is compiled with for each mode."""
 _SUBSTITUTIONS = {Count.ALL: 0, Count.FIRST: 1}
 """The ``count`` argument of :meth:`re.Pattern.sub` for each spelling, 0 meaning all."""
 
@@ -105,10 +123,10 @@ def _parse_rule(entry: object, position: int, source: str) -> Rule:
     if unknown:
         raise RulesError(source, f"{where}: unknown {_listed(unknown)}")
 
-    kind = entry["type"]
-    if not isinstance(kind, str) or kind not in RULE_TYPES:
-        raise RulesError(source, f"{where}: 'type' must be 're', got {kind!r}")
+    kind = _pick(entry["type"], TYPE_VALUES, "type", where, source)
+    case = _pick(entry["case"], CASE_VALUES, "case", where, source)
     count = _pick(entry["count"], COUNT_VALUES, "count", where, source)
+    mode = _pick(entry["mode"], MODE_VALUES, "mode", where, source)
     streams = entry["streams"]
     if not isinstance(streams, list) or not streams:
         raise RulesError(source, f"{where}: 'streams' must be a non-empty list")
@@ -117,8 +135,13 @@ def _parse_rule(entry: object, position: int, source: str) -> Rule:
     )
     target = _text(entry["target"], "target", where, source)
     replacement = _text(entry["replacement"], "replacement", where, source)
+    if kind is RuleType.STR:
+        # Both stand for themselves: no metacharacter in the one, no backreference in
+        # the other, so the same substitution serves both types
+        target = re.escape(target)
+        replacement = replacement.replace("\\", "\\\\")
     try:
-        pattern = re.compile(target)
+        pattern = re.compile(target, _MODE_FLAGS[mode] | _CASE_FLAGS[case])
     except re.error as exc:
         raise RulesError(source, f"{where}: 'target' is not a valid regex: {exc}") from exc
     try:
@@ -128,8 +151,11 @@ def _parse_rule(entry: object, position: int, source: str) -> Rule:
     except re.error as exc:
         raise RulesError(source, f"{where}: 'replacement' is not valid: {exc}") from exc
     return Rule(
+        case=case,
         count=count,
         identifier=identifier,
+        kind=kind,
+        mode=mode,
         replacement=replacement,
         streams=selected,
         target=pattern,

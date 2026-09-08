@@ -6,6 +6,8 @@ rules:
     target: foo
     replacement: baz
     count: first
+    mode: multiline
+    case: ignore
 
   - id: rule_2
     type: re
@@ -14,21 +16,27 @@ rules:
     target: foo
     replacement: bar
     count: all
+    mode: multiline
+    case: respect
 
   - id: rule_3
     type: re
     streams:
       - stderr
       - stdout
-    target: "ba([^z\n]*)"
+    target: "ba([^z]*)$"
     replacement: bazbaz
     count: all
+    mode: multiline
+    case: respect
 
   - id: rule_4
     type: re
     streams:
       - include
-    target: "ba([^z\n]*)"
+    target: "ba([^z]*)"
     replacement: bazbazbaz
     count: first
+    mode: default
+    case: respect
 

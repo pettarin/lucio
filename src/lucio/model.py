@@ -10,6 +10,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+class Case(enum.Enum):
+    """Whether a replacement rule minds the case of letters, as spelled by its ``case`` field."""
+
+    IGNORE = "ignore"
+    RESPECT = "respect"
+
+
 class Command(enum.Enum):
     """What a block asks lucio to do, as spelled by its ``command`` attribute."""
 
@@ -22,6 +29,28 @@ class Count(enum.Enum):
 
     ALL = "all"
     FIRST = "first"
+
+
+class Mode(enum.Enum):
+    """How the target of a replacement rule is matched, as spelled by its ``mode`` field.
+
+    In ``multiline`` mode ``^`` and ``$`` match at every line boundary of the captured
+    text; in ``default`` mode they match at its ends only, as :mod:`re` does by default.
+    """
+
+    DEFAULT = "default"
+    MULTILINE = "multiline"
+
+
+class RuleType(enum.Enum):
+    """How the target of a replacement rule is read, as spelled by its ``type`` field.
+
+    An ``re`` target is a regular expression and its replacement a template with
+    backreferences; a ``str`` target is a literal text and its replacement another.
+    """
+
+    RE = "re"
+    STR = "str"
 
 
 class Stream(enum.Enum):
@@ -95,13 +124,18 @@ class ExecutionResult:
 class Rule:
     """One replacement rule of a rules file, its target already compiled."""
 
+    case: Case
     count: Count
     identifier: str
     """The key naming the rule in the file, unique within it."""
+    kind: RuleType
+    mode: Mode
     replacement: str
-    """The replacement text, with the backreferences :func:`re.sub` understands."""
+    """The template :meth:`re.Pattern.sub` is given: as written for an ``re`` rule, escaped
+    to stand for itself for a ``str`` rule."""
     streams: frozenset[Stream]
     target: re.Pattern[str]
+    """The target, escaped for a ``str`` rule, compiled with the flags of its mode and case."""
 
 
 @dataclass(frozen=True, slots=True)

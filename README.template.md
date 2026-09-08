@@ -228,11 +228,13 @@ The file holds a single key, `rules`, listing the rules, each with all of these 
 | Field         | Value                                                                    |
 |---------------|--------------------------------------------------------------------------|
 | `id`          | a string naming the rule, unique within the file                         |
-| `type`        | `re`, the only type for now: `target` is a regular expression            |
+| `type`        | `re` for a regular expression, `str` for a literal text                  |
 | `streams`     | a non-empty list drawn from `stdout`, `stderr`, and `include`            |
-| `target`      | the Python regular expression to look for                                |
-| `replacement` | the replacement text, where `\1` and `\g<name>` refer to `target` groups |
+| `target`      | the Python regular expression, or the literal text, to look for          |
+| `replacement` | the replacement text; for `re`, `\1` and `\g<name>` refer to the groups  |
 | `count`       | `first` to rewrite the first match only, `all` to rewrite every match    |
+| `mode`        | `default`, or `multiline` to let `^` and `$` match at every line         |
+| `case`        | `respect` to match the case of letters as written, `ignore` to not       |
 
 The rules apply to every `lucio` block, in the order they are written: each rule sees the
 text as the previous one left it. `stdout` and `stderr` are the streams captured by a
@@ -240,9 +242,13 @@ text as the previous one left it. `stdout` and `stderr` are the streams captured
 `command=include` block, so a rule for `stdout` never touches an included file and vice versa.
 The regular expression is matched against the whole captured text at once, newlines included,
 before the text is normalized and fenced, and before `stdout` or `stderr` are hidden by
-the attributes of the block. So `^` and `$` anchor the whole text, not a line of it,
-unless the expression opts into multiline mode with `(?m)`,
-and `.` stops at a newline as usual.
+the attributes of the block. So, in `default` mode, `^` and `$` anchor the whole text,
+not a line of it; `multiline` mode makes them match at every line boundary instead,
+which is what a rule masking one line of a longer output usually wants.
+In either mode `.` stops at a newline, as usual.
+A `str` rule looks for its `target` as written, metacharacters included, and pastes its
+`replacement` as written, so neither needs escaping; `count`, `mode`, and `case` apply to
+it all the same.
 A rule rewrites what the document shows only: the exit code
 check still sees the stderr the block really produced.
 
